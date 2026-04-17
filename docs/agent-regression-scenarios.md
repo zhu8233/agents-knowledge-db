@@ -76,6 +76,21 @@ An older canonical note has been superseded. Retire it safely.
 - archive rather than delete
 - log the action
 
+## Scenario 7: Project Archiving
+
+### Prompt
+
+Archive an already-maintained engineering project into the governed vault without copying the whole source repository into note files.
+
+### Expected behavior
+
+- resolve or create a project topic
+- preserve repo lineage
+- create intake archive metadata
+- create curation project notes
+- avoid raw code dump
+- avoid direct canonical self-publish unless clearly stable
+
 ## How To Use These Scenarios
 
 - Run them manually with different agent systems

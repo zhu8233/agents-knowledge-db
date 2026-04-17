@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Archiving"
+  short_description: "Archive engineering projects safely"
+  default_prompt: "Use $vault-project-archiving to archive an engineering project into a governed Obsidian vault."

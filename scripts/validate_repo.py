@@ -24,6 +24,7 @@ REQUIRED_FILES = [
     "docs/quickstart.md",
     "docs/github-publishing.md",
     "docs/agent-regression-scenarios.md",
+    "docs/project-archiving.md",
     "docs/regression-plan.md",
     "templates/vault-root/RULES.md",
     "templates/vault-root/01-Workflow/Knowledge-Governance/00-Agent-Onboarding.md",
@@ -33,6 +34,7 @@ REQUIRED_FILES = [
     "tests/regression-prompts/02-raw-source-update.md",
     "tests/regression-prompts/03-canonical-temptation.md",
     "tests/regression-prompts/04-topic-collision.md",
+    "tests/regression-prompts/05-project-archiving.md",
     "scripts/smoke_install.py",
 ]
 
@@ -40,6 +42,7 @@ REQUIRED_FILES = [
 SKILL_NAMES = [
     "vault-governance",
     "vault-intake-curation",
+    "vault-project-archiving",
     "vault-canonical-promotion",
     "vault-audit-repair",
     "hermes-coordination",

@@ -29,6 +29,7 @@ This kit solves that by combining:
 3. one machine fact layer: `.knowledge-registry/`
 4. a portable skill pack for agent behavior
 5. promotion and audit workflows to control drift
+6. a project-archiving workflow for bringing maintained engineering work into the vault
 
 ## Design
 
@@ -77,7 +78,7 @@ The skill pack teaches agents how to:
 - enter a governed vault
 - identify layer and topic
 - decide if they can write
-- route work into intake, curation, promotion, audit, or Hermes coordination
+- route work into intake, curation, project archiving, promotion, audit, or Hermes coordination
 
 ## Repository Layout
 
@@ -102,6 +103,7 @@ The skill pack teaches agents how to:
 
 - `vault-governance`
 - `vault-intake-curation`
+- `vault-project-archiving`
 - `vault-canonical-promotion`
 - `vault-audit-repair`
 - `hermes-coordination`
@@ -192,6 +194,17 @@ The intended onboarding path for any agent is:
 7. route to the appropriate skill
 
 If you want "any agent can enter and align quickly", this onboarding path is the minimum contract.
+
+## Project Archiving
+
+This repository includes a dedicated scenario for archiving an already-maintained engineering project into the vault.
+
+Use `$vault-project-archiving` when you need to:
+
+- preserve project knowledge from an existing repo
+- create project overview and architecture notes
+- map source lineage without dumping raw code into the vault
+- keep active project material in curation until a stable summary deserves promotion
 
 ## Validation
 

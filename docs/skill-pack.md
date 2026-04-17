@@ -22,6 +22,10 @@ Entry skill. Use before reading or editing a governed vault.
 
 Use for raw source handling and curation-layer work.
 
+### `vault-project-archiving`
+
+Use when an existing engineering project should become structured vault knowledge instead of a raw code mirror.
+
 ### `vault-canonical-promotion`
 
 Use when material may become long-lived canonical knowledge.
