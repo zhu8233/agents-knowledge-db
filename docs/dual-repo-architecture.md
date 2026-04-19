@@ -25,7 +25,7 @@ Owns:
 
 Any governed vault, for example:
 
-- `native_AllNotes_Governed`
+- `your-governed-vault`
 
 Owns:
 
