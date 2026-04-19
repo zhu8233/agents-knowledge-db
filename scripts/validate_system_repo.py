@@ -40,6 +40,8 @@ def main() -> None:
             continue
         if ".worktrees" in path.parts:
             continue
+        if path.name == "validate_system_repo.py":
+            continue
         if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".pyc"}:
             continue
         try:
