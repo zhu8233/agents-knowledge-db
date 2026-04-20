@@ -2,11 +2,11 @@
 
 ## Recommended Repository Name
 
-- `obsidian-vault-governance-kit`
+- `agents-knowledge-db`
 
 ## Recommended Short Description
 
-- Portable governance kit for multi-agent Obsidian vault maintenance across models and workflows.
+- Agent-driven personal knowledge database system with a productized governance kernel, snapshot-based data repos, and multi-agent operations.
 
 ## Suggested Topics
 
@@ -25,11 +25,11 @@
 
 This repository provides:
 
-- a portable `RULES.md`-first governance model
+- an `Agents Knowledge DB` system kernel
 - machine-readable registry schemas
 - multi-agent behavior skills
-- vault bootstrap templates
-- an example governed vault
+- data-repository bootstrap templates
+- an example governed data repository
 
 ## Before Publishing
 
@@ -49,6 +49,13 @@ This repository provides:
 - example governed vault
 - governance skill pack
 - repository validation workflow
+
+### Recommended v1 line
+
+- `v1.1.0`
+- branding unified as `Agents Knowledge DB`
+- system repository and data repository model clarified
+- dual-repo DBMS architecture now part of the public product identity
 
 ## Optional Future GitHub Enhancements
 

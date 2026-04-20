@@ -1,8 +1,8 @@
-# Obsidian Vault Governance Kit
+# Agents Knowledge DB
 
-Portable governance kit for multi-agent Obsidian vault maintenance.
+An agent-driven personal knowledge database system with a productized governance kernel and a snapshot-consuming data repository model.
 
-This project is for people who want a personal or team knowledge vault that can be edited by:
+This project is for people who want a personal or team knowledge database that can be operated by:
 
 - humans
 - ingestion workflows
@@ -10,7 +10,7 @@ This project is for people who want a personal or team knowledge vault that can 
 - coordinator agents
 - multiple model ecosystems
 
-without losing topic identity, source lineage, canonical stability, or long-term maintainability.
+without losing topic identity, source lineage, canonical stability, system integrity, or long-term maintainability.
 
 ## Why This Exists
 
@@ -58,7 +58,7 @@ That lets the same vault work across multiple agent ecosystems without making th
 
 This project is the **system repository**.
 
-A governed knowledge vault acts as the **data repository**.
+A governed knowledge database acts as the **data repository**.
 
 The intended relationship is:
 
@@ -152,7 +152,7 @@ See also:
 - `core/DBMS/`
 - `core/skills-manifest.md`
 
-### Example governed vault
+### Example governed data repository
 
 - `examples/portable-vault/`
 
@@ -274,7 +274,7 @@ GitHub Actions also runs this validation on push and pull request.
 
 ## Publishing
 
-This repository is designed to be published on GitHub.
+This repository is designed to be published on GitHub as the open-source system repository for Agents Knowledge DB.
 
 Recommended release steps:
 
@@ -296,7 +296,7 @@ If an agent refuses to read the rules, no documentation package can fully save i
 
 ## Current Status
 
-This is a publishable v1:
+This is a publishable v1 system repository:
 
 - architecture defined
 - templates included
@@ -305,7 +305,7 @@ This is a publishable v1:
 - validation script included
 - GitHub workflow included
 
-This repository is also the starting point for a v2 dual-repo model:
+This repository is also the foundation of the Agents Knowledge DB dual-repo model:
 
 - productized system repo
 - data repo snapshot consumption

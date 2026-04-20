@@ -1,6 +1,6 @@
 # RULES.md
 
-This repository publishes a portable governance system for multi-agent knowledge vaults.
+This repository publishes the system kernel for Agents Knowledge DB: an agent-driven personal knowledge database system.
 
 ## Project Rule Source
 

@@ -8,7 +8,8 @@ Separate the governance system from the governed data vault.
 
 ### System repository
 
-`obsidian-vault-governance-kit`
+Agents Knowledge DB system repository  
+Current repository slug may still be `obsidian-vault-governance-kit` until renamed.
 
 Owns:
 
@@ -23,7 +24,7 @@ Owns:
 
 ### Data repository
 
-Any governed vault, for example:
+Any governed data repository, for example:
 
 - `your-governed-vault`
 
