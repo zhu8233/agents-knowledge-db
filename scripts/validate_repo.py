@@ -80,6 +80,7 @@ REQUIRED_FILES = [
     "scripts/registry_updates.py",
     "scripts/snapshot_upgrade.py",
     "scripts/rebuild_dbms_index.py",
+    "scripts/reconcile_dbms_state.py",
     "scripts/validate_system_repo.py",
     "scripts/validate_data_repo.py",
 ]
