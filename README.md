@@ -74,6 +74,7 @@ The intended relationship is:
 
 - `vault-registry.json`
 - `agent-roster.json`
+- `governance-proposals.json`
 - `promotion-queue.json`
 - `change-ledger.jsonl`
 
@@ -85,6 +86,12 @@ The registry is the source of truth for:
 - agent roles
 - promotion state
 - change history
+
+`governance-proposals.json` is the unified proposal store for:
+
+- registry update proposals
+- snapshot review requests
+- promotion workflow state
 
 ### DBMS index strategy
 
@@ -241,7 +248,7 @@ python scripts/rebuild_dbms_index.py /path/to/your-vault
 To expose governed vault context and role-filtered governance tools through MCP:
 
 ```bash
-python scripts/mcp_governance_server.py /path/to/your-vault --subject-id owner@example.com --auth-mode oauth
+python scripts/run_mcp_server.py /path/to/your-vault --subject-id owner@example.com --auth-mode oauth
 ```
 
 The current implementation supports:
@@ -250,11 +257,40 @@ The current implementation supports:
 - MCP `prompts`
 - MCP `tools`
 - server-first adoption for MCP-capable agents
+- launcher-based stdio startup through `scripts/run_mcp_server.py`
+- identity introspection through `whoami`
 - role-filtered tool visibility driven by `LocalOverrides/mcp-access-policy.json`
 - controlled registry writes through `apply_registry_update` for authorized system maintainers
 - promotion queue creation through `create_promotion_proposal` for authorized maintainers
 - promotion queue review/apply through `list_promotion_queue`, `review_promotion_proposal`, and `apply_promotion_proposal`
+- snapshot review requests through `request_snapshot_review`
 - controlled snapshot review/apply flow through `review_snapshot_upgrade` and `apply_snapshot_upgrade`
+
+The current MCP resources include:
+
+- root rules
+- vault registry
+- agent roster
+- unified governance proposals
+- promotion queue
+- compatibility status
+- snapshot version
+- change ledger
+- DBMS findings
+
+The current MCP prompts include:
+
+- `onboard_agent_to_vault`
+- `review_topic_health`
+- `prepare_registry_repair`
+- `review_snapshot_upgrade`
+- `review_promotion_proposal`
+
+See also:
+
+- `docs/mcp-client-configs.md`
+- `docs/mcp-role-examples.md`
+- `docs/mcp-vs-skills-adoption.md`
 
 ### 5. Start with intake and curation only
 
