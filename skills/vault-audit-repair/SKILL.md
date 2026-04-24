@@ -9,6 +9,9 @@ description: Use when a governed Obsidian vault may have drift, duplicates, miss
 
 This skill checks whether the vault still matches its own governance model. It is for diagnosis first and repair second.
 
+If your agent supports MCP, 优先 use the governance MCP server for structured findings, proposal, and review flows.
+Use this skill as the compatibility layer when MCP is unavailable.
+
 ## Audit Targets
 
 - missing or stale topic mapping

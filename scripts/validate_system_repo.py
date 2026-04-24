@@ -27,6 +27,7 @@ def main() -> None:
         ROOT / "scripts" / "sync_system_snapshot.py",
         ROOT / "scripts" / "check_override_compat.py",
         ROOT / "scripts" / "rebuild_dbms_index.py",
+        ROOT / "scripts" / "reconcile_dbms_state.py",
         ROOT / "scripts" / "validate_data_repo.py",
     ]
     for path in required:

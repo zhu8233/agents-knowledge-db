@@ -9,6 +9,9 @@ description: Use when working inside a governed Obsidian vault, before reading o
 
 Use this as the entry skill for any governed vault. Its job is to align the agent before work starts: find the rule source, determine the target layer, check write authority, and decide whether the task is intake, curation, promotion, audit, or archive.
 
+If your agent supports MCP, 优先 connect the vault governance MCP server.
+Use this skill as the compatibility layer when MCP is unavailable.
+
 ## First Pass
 
 1. Read `RULES.md`

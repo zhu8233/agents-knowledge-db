@@ -39,6 +39,7 @@ For audit or scan tasks, also read:
 - `.knowledge-registry/change-ledger.jsonl`
 - `.knowledge-registry/agent-roster.json`
 - `.knowledge-registry/promotion-queue.json`
+- `.knowledge-registry/governance-proposals.json` (governance proposals, pending and reviewed; apply only through approved workflows)
 
 ## Onboarding File
 

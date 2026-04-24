@@ -9,6 +9,9 @@ description: Use when curated vault material may need to become stable canonical
 
 This skill exists to stop agents from publishing working notes as official knowledge too early. It routes durable material through a promotion process instead of silent direct edits.
 
+If your agent supports MCP, 优先 use the governance MCP server for proposal, queue, review, and apply operations.
+Use this skill as the compatibility layer when MCP is unavailable.
+
 ## Promotion Conditions
 
 The candidate should have:

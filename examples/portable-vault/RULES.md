@@ -20,6 +20,10 @@ For audit or scan tasks:
 4. read `01-Workflow/Knowledge-Governance/DBMS/state/last-index-run.json`
 5. read `01-Workflow/Knowledge-Governance/DBMS/index/findings.json`
 
-## Example registry path
+## Example registry files
 
-See `.knowledge-registry/vault-registry.json`.
+- `.knowledge-registry/vault-registry.json`
+- `.knowledge-registry/change-ledger.jsonl`
+- `.knowledge-registry/agent-roster.json`
+- `.knowledge-registry/promotion-queue.json`
+- `.knowledge-registry/governance-proposals.json`
