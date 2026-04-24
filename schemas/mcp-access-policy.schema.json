@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/obsidian-vault-governance-kit/mcp-access-policy.schema.json",
+  "title": "MCP Access Policy",
+  "type": "object",
+  "required": ["version", "default_decision", "identity_mappings", "role_policies"],
+  "properties": {
+    "version": { "type": "string" },
+    "default_decision": { "type": "string", "enum": ["deny"] },
+    "identity_mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["subject_id", "auth_mode", "agent_id", "mcp_role"],
+        "properties": {
+          "subject_id": { "type": "string" },
+          "auth_mode": { "type": "string", "enum": ["oauth", "token"] },
+          "agent_id": { "type": "string" },
+          "mcp_role": { "type": "string" },
+          "notes": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "role_policies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["mcp_role", "allowed_tools", "proposal_only_tools", "max_risk_level", "require_approval_at_or_above"],
+        "properties": {
+          "mcp_role": { "type": "string" },
+          "allowed_tools": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "proposal_only_tools": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "max_risk_level": {
+            "type": "string",
+            "enum": ["L0", "L1", "L2", "L3", "L4"]
+          },
+          "require_approval_at_or_above": {
+            "type": "string",
+            "enum": ["L0", "L1", "L2", "L3", "L4"]
+          },
+          "suggested_proposal_tool": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

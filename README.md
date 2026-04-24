@@ -128,6 +128,9 @@ See also:
 
 - `docs/dual-repo-architecture.md`
 - `docs/agent-indexing.md`
+- `docs/mcp-access-model.md`
+- `docs/mcp-server.md`
+- `docs/mcp-role-examples.md`
 
 ## Included Components
 
@@ -145,11 +148,13 @@ See also:
 - `schemas/vault-registry.schema.json`
 - `schemas/agent-roster.schema.json`
 - `schemas/promotion-queue.schema.json`
+- `schemas/governance-proposals.schema.json`
 - `schemas/change-ledger-entry.schema.json`
 - `schemas/dbms-file-index-entry.schema.json`
 - `schemas/dbms-topic-summary.schema.json`
 - `schemas/dbms-findings.schema.json`
 - `schemas/dbms-index-run-state.schema.json`
+- `schemas/mcp-access-policy.schema.json`
 
 ### Vault bootstrap templates
 
@@ -199,6 +204,7 @@ Customize:
 - agent IDs
 - local topic naming rules
 - local folder conventions
+- local MCP identity mappings and role policies
 - any platform-specific adapter wording
 - local override files
 
@@ -227,6 +233,25 @@ After installation or after major vault changes, rebuild the materialized scan i
 ```bash
 python scripts/rebuild_dbms_index.py /path/to/your-vault
 ```
+
+### 4.7 Start the governance MCP server
+
+To expose governed vault context and role-filtered governance tools through MCP:
+
+```bash
+python scripts/mcp_governance_server.py /path/to/your-vault --subject-id owner@example.com --auth-mode oauth
+```
+
+The current implementation supports:
+
+- MCP `resources`
+- MCP `prompts`
+- MCP `tools`
+- role-filtered tool visibility driven by `LocalOverrides/mcp-access-policy.json`
+- controlled registry writes through `apply_registry_update` for authorized system maintainers
+- promotion queue creation through `create_promotion_proposal` for authorized maintainers
+- promotion queue review/apply through `list_promotion_queue`, `review_promotion_proposal`, and `apply_promotion_proposal`
+- controlled snapshot review/apply flow through `review_snapshot_upgrade` and `apply_snapshot_upgrade`
 
 ### 5. Start with intake and curation only
 
@@ -288,6 +313,8 @@ It checks:
 - `openai.yaml` prompts mention the correct `$skill-name`
 - JSON and JSONL files parse
 - template and example vault registry files parse
+- MCP access policy files parse
+- governance proposal files parse
 - DBMS index placeholders and state files exist
 - dual-repo support files exist
 - core system snapshot source exists
