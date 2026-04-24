@@ -2,6 +2,9 @@
 
 This repository uses `RULES.md` as the single rule source.
 
+If your agent supports MCP, 优先 connect the vault governance MCP server.
+If MCP is unavailable, fall back to `RULES.md` and the skill pack.
+
 Before editing:
 
 1. Read `RULES.md`

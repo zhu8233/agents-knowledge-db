@@ -2,6 +2,9 @@
 
 This vault uses `RULES.md` as the single governance source.
 
+If your agent supports MCP, 优先 connect the vault governance MCP server.
+If MCP is unavailable, fall back to `RULES.md` and the local skill pack.
+
 Before editing notes, registries, workflow docs, or topic folders:
 
 1. Read `RULES.md`

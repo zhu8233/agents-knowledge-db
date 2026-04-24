@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/obsidian-vault-governance-kit/governance-proposals.schema.json",
+  "title": "Governance Proposals",
+  "type": "object",
+  "required": ["version", "last_updated", "items"],
+  "properties": {
+    "version": { "type": "string" },
+    "last_updated": { "type": "string" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "proposal_id",
+          "proposal_type",
+          "status",
+          "submitted_by",
+          "submitted_at",
+          "summary"
+        ],
+        "properties": {
+          "proposal_id": { "type": "string" },
+          "proposal_type": { "type": "string" },
+          "status": { "type": "string" },
+          "submitted_by": { "type": "string" },
+          "submitted_at": { "type": "string" },
+          "reviewed_by": { "type": ["string", "null"] },
+          "reviewed_at": { "type": ["string", "null"] },
+          "applied_by": { "type": ["string", "null"] },
+          "applied_at": { "type": ["string", "null"] },
+          "summary": { "type": "string" },
+          "details": { "type": "object" }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}

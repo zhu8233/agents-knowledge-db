@@ -1,0 +1,91 @@
+{
+  "version": "1.0",
+  "default_decision": "deny",
+  "identity_mappings": [
+    {
+      "subject_id": "owner@example.com",
+      "auth_mode": "oauth",
+      "agent_id": "human",
+      "mcp_role": "system-maintainer",
+      "notes": "Example owner login"
+    },
+    {
+      "subject_id": "owner@example.com",
+      "auth_mode": "token",
+      "agent_id": "human",
+      "mcp_role": "system-maintainer",
+      "notes": "Example owner automation token"
+    },
+    {
+      "subject_id": "maintainer@example.com",
+      "auth_mode": "oauth",
+      "agent_id": "human",
+      "mcp_role": "vault-maintainer",
+      "notes": "Example maintainer login"
+    },
+    {
+      "subject_id": "reader@example.com",
+      "auth_mode": "oauth",
+      "agent_id": "human",
+      "mcp_role": "vault-user",
+      "notes": "Example read-only login"
+    }
+  ],
+  "role_policies": [
+    {
+      "mcp_role": "system-maintainer",
+      "allowed_tools": [
+        "*"
+      ],
+      "proposal_only_tools": [],
+      "max_risk_level": "L4",
+      "require_approval_at_or_above": "L3",
+      "suggested_proposal_tool": null
+    },
+    {
+      "mcp_role": "vault-maintainer",
+      "allowed_tools": [
+        "search_topics",
+        "get_topic_context",
+        "list_topic_findings",
+        "whoami",
+        "validate_data_repo",
+        "generate_governance_report",
+        "propose_registry_update",
+        "evaluate_access",
+        "create_promotion_proposal",
+        "list_promotion_queue",
+        "review_snapshot_upgrade",
+        "request_index_rebuild",
+        "request_snapshot_review",
+        "submit_audit_remediation_proposal"
+      ],
+      "proposal_only_tools": [
+        "apply_registry_update",
+        "apply_snapshot_upgrade",
+        "repair_protected_zone"
+      ],
+      "max_risk_level": "L1",
+      "require_approval_at_or_above": "L1",
+      "suggested_proposal_tool": "propose_registry_update"
+    },
+    {
+      "mcp_role": "vault-user",
+      "allowed_tools": [
+        "search_topics",
+        "get_topic_context",
+        "list_topic_findings",
+        "whoami",
+        "get_source_lineage",
+        "get_change_summary",
+        "ask_governance_rules",
+        "list_canonical_assets",
+        "explain_topic_status"
+      ],
+      "proposal_only_tools": [],
+      "max_risk_level": "L0",
+      "require_approval_at_or_above": "L4",
+      "suggested_proposal_tool": null
+    }
+  ]
+}
