@@ -96,7 +96,7 @@ class GovernanceBackend:
     def _tool_catalog(self) -> list[dict]:
         return [
             {
-                "name": "search_topics",
+                "name": "governance_search_topics",
                 "title": "Search Topics",
                 "description": "Search the vault registry by topic title or alias.",
                 "risk_level": "L0",
@@ -110,7 +110,7 @@ class GovernanceBackend:
                 },
             },
             {
-                "name": "get_topic_context",
+                "name": "governance_get_topic_context",
                 "title": "Get Topic Context",
                 "description": "Return registry, object, and finding context for a topic.",
                 "risk_level": "L0",
@@ -124,7 +124,7 @@ class GovernanceBackend:
                 },
             },
             {
-                "name": "list_topic_findings",
+                "name": "governance_list_topic_findings",
                 "title": "List Topic Findings",
                 "description": "List DBMS findings for a topic or the whole vault.",
                 "risk_level": "L0",
@@ -137,7 +137,7 @@ class GovernanceBackend:
                 },
             },
             {
-                "name": "validate_data_repo",
+                "name": "governance_validate_data_repo",
                 "title": "Validate Data Repo",
                 "description": "Run the governed data repository validator against the current vault.",
                 "risk_level": "L1",
@@ -146,7 +146,7 @@ class GovernanceBackend:
                 "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
             },
             {
-                "name": "whoami",
+                "name": "governance_whoami",
                 "title": "Who Am I",
                 "description": "Return the current subject identity, effective role, and visible governance tools.",
                 "risk_level": "L0",
@@ -155,7 +155,7 @@ class GovernanceBackend:
                 "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
             },
             {
-                "name": "propose_registry_update",
+                "name": "governance_propose_registry_update",
                 "title": "Propose Registry Update",
                 "description": "Create and persist a structured registry update proposal without mutating the registry.",
                 "risk_level": "L1",
@@ -175,7 +175,7 @@ class GovernanceBackend:
                 },
             },
             {
-                "name": "create_promotion_proposal",
+                "name": "governance_create_promotion_proposal",
                 "title": "Create Promotion Proposal",
                 "description": "Append a proposal to the promotion queue and record it in the ledger.",
                 "risk_level": "L1",
@@ -194,7 +194,7 @@ class GovernanceBackend:
                 },
             },
             {
-                "name": "list_promotion_queue",
+                "name": "governance_list_promotion_queue",
                 "title": "List Promotion Queue",
                 "description": "Read the current promotion queue.",
                 "risk_level": "L0",
@@ -203,7 +203,7 @@ class GovernanceBackend:
                 "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
             },
             {
-                "name": "apply_registry_update",
+                "name": "governance_apply_registry_update",
                 "title": "Apply Registry Update",
                 "description": "Apply a registry upsert and append a change-ledger entry.",
                 "risk_level": "L2",
@@ -223,7 +223,7 @@ class GovernanceBackend:
                 },
             },
             {
-                "name": "review_promotion_proposal",
+                "name": "governance_review_promotion_proposal",
                 "title": "Review Promotion Proposal",
                 "description": "Approve or reject a queued promotion proposal.",
                 "risk_level": "L3",
@@ -241,7 +241,7 @@ class GovernanceBackend:
                 },
             },
             {
-                "name": "apply_promotion_proposal",
+                "name": "governance_apply_promotion_proposal",
                 "title": "Apply Promotion Proposal",
                 "description": "Apply an approved promotion proposal to registry canonical placement.",
                 "risk_level": "L3",
@@ -258,7 +258,7 @@ class GovernanceBackend:
                 },
             },
             {
-                "name": "evaluate_access",
+                "name": "governance_evaluate_access",
                 "title": "Evaluate Access",
                 "description": "Evaluate the current subject against a requested governance action.",
                 "risk_level": "L0",
@@ -276,7 +276,7 @@ class GovernanceBackend:
                 },
             },
             {
-                "name": "request_snapshot_review",
+                "name": "governance_request_snapshot_review",
                 "title": "Request Snapshot Review",
                 "description": "Create and persist a proposal for snapshot upgrade review.",
                 "risk_level": "L1",
@@ -290,7 +290,7 @@ class GovernanceBackend:
                 },
             },
             {
-                "name": "review_snapshot_upgrade",
+                "name": "governance_review_snapshot_upgrade",
                 "title": "Review Snapshot Upgrade",
                 "description": "Compare the active snapshot with local compatibility state.",
                 "risk_level": "L1",
@@ -299,7 +299,7 @@ class GovernanceBackend:
                 "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
             },
             {
-                "name": "apply_snapshot_upgrade",
+                "name": "governance_apply_snapshot_upgrade",
                 "title": "Apply Snapshot Upgrade",
                 "description": "Sync the latest system snapshot into the vault and update compatibility state.",
                 "risk_level": "L4",
@@ -393,12 +393,12 @@ class GovernanceBackend:
                 ],
             },
             {
-                "name": "review_snapshot_upgrade",
+                "name": "governance_review_snapshot_upgrade",
                 "description": "Guide a system maintainer through snapshot upgrade review and approval.",
                 "arguments": [],
             },
             {
-                "name": "review_promotion_proposal",
+                "name": "governance_review_promotion_proposal",
                 "description": "Guide a reviewer through promotion proposal approval criteria.",
                 "arguments": [
                     {"name": "proposal_id", "description": "Promotion proposal ID", "required": True}
@@ -431,13 +431,13 @@ class GovernanceBackend:
                 "before proposing any registry update."
             )
             return {"messages": [{"role": "user", "content": {"type": "text", "text": text}}]}
-        if name == "review_snapshot_upgrade":
+        if name == "governance_review_snapshot_upgrade":
             text = (
                 "Review the installed snapshot version, local compatibility status, and any open snapshot proposal "
                 "before deciding whether to apply the latest system snapshot."
             )
             return {"messages": [{"role": "user", "content": {"type": "text", "text": text}}]}
-        if name == "review_promotion_proposal":
+        if name == "governance_review_promotion_proposal":
             proposal_id = arguments.get("proposal_id")
             if not proposal_id:
                 raise ValueError("proposal_id is required")
@@ -477,7 +477,7 @@ class GovernanceBackend:
                 "structuredContent": {"tool": name},
             }
 
-    def _tool_search_topics(self, arguments: dict) -> dict:
+    def _tool_governance_search_topics(self, arguments: dict) -> dict:
         query = arguments["query"].strip().lower()
         registry = self._registry()
         matches = []
@@ -499,7 +499,7 @@ class GovernanceBackend:
             "structuredContent": {"query": arguments["query"], "totalMatches": len(matches), "matches": matches},
         }
 
-    def _tool_get_topic_context(self, arguments: dict) -> dict:
+    def _tool_governance_get_topic_context(self, arguments: dict) -> dict:
         topic_id = arguments["topic_id"]
         registry = self._registry()
         findings = self._findings().get("items", [])
@@ -530,7 +530,7 @@ class GovernanceBackend:
             },
         }
 
-    def _tool_list_topic_findings(self, arguments: dict) -> dict:
+    def _tool_governance_list_topic_findings(self, arguments: dict) -> dict:
         topic_id = arguments.get("topic_id")
         findings = self._findings().get("items", [])
         if topic_id:
@@ -542,7 +542,7 @@ class GovernanceBackend:
             "structuredContent": {"topic_id": topic_id, "items": findings, "totalFindings": len(findings)},
         }
 
-    def _tool_validate_data_repo(self, arguments: dict) -> dict:
+    def _tool_governance_validate_data_repo(self, arguments: dict) -> dict:
         result = subprocess.run(
             [sys.executable, str(Path(__file__).resolve().parent / "validate_data_repo.py"), str(self.vault_root)],
             capture_output=True,
@@ -561,8 +561,8 @@ class GovernanceBackend:
             },
         }
 
-    def _tool_whoami(self, arguments: dict) -> dict:
-        visible_tools = [tool["name"] for tool in self.list_tools() if tool["name"] != "whoami"]
+    def _tool_governance_whoami(self, arguments: dict) -> dict:
+        visible_tools = [tool["name"] for tool in self.list_tools() if tool["name"] != "governance_whoami"]
         role = "unknown"
         mapped_agent_id = None
         for tool in self._tool_catalog():
@@ -584,7 +584,7 @@ class GovernanceBackend:
             },
         }
 
-    def _tool_propose_registry_update(self, arguments: dict) -> dict:
+    def _tool_governance_propose_registry_update(self, arguments: dict) -> dict:
         proposal = propose_registry_update(
             self.vault_root,
             subject_id=self.subject_id,
@@ -605,7 +605,7 @@ class GovernanceBackend:
             "structuredContent": {"proposal": proposal},
         }
 
-    def _tool_create_promotion_proposal(self, arguments: dict) -> dict:
+    def _tool_governance_create_promotion_proposal(self, arguments: dict) -> dict:
         result = create_promotion_proposal(
             self.vault_root,
             subject_id=self.subject_id,
@@ -620,7 +620,7 @@ class GovernanceBackend:
             "structuredContent": result,
         }
 
-    def _tool_list_promotion_queue(self, arguments: dict) -> dict:
+    def _tool_governance_list_promotion_queue(self, arguments: dict) -> dict:
         result = list_promotion_queue(self.vault_root)
         return {
             "isError": False,
@@ -628,7 +628,7 @@ class GovernanceBackend:
             "structuredContent": result,
         }
 
-    def _tool_apply_registry_update(self, arguments: dict) -> dict:
+    def _tool_governance_apply_registry_update(self, arguments: dict) -> dict:
         result = apply_registry_update_with_proposal(
             self.vault_root,
             subject_id=self.subject_id,
@@ -658,7 +658,7 @@ class GovernanceBackend:
             "structuredContent": response,
         }
 
-    def _tool_review_promotion_proposal(self, arguments: dict) -> dict:
+    def _tool_governance_review_promotion_proposal(self, arguments: dict) -> dict:
         result = review_promotion_proposal(
             self.vault_root,
             subject_id=self.subject_id,
@@ -672,7 +672,7 @@ class GovernanceBackend:
             "structuredContent": result,
         }
 
-    def _tool_apply_promotion_proposal(self, arguments: dict) -> dict:
+    def _tool_governance_apply_promotion_proposal(self, arguments: dict) -> dict:
         result = apply_promotion_proposal(
             self.vault_root,
             subject_id=self.subject_id,
@@ -685,7 +685,7 @@ class GovernanceBackend:
             "structuredContent": result,
         }
 
-    def _tool_evaluate_access(self, arguments: dict) -> dict:
+    def _tool_governance_evaluate_access(self, arguments: dict) -> dict:
         decision = evaluate_access(
             self.vault_root,
             self.subject_id,
@@ -700,7 +700,7 @@ class GovernanceBackend:
             "structuredContent": decision,
         }
 
-    def _tool_request_snapshot_review(self, arguments: dict) -> dict:
+    def _tool_governance_request_snapshot_review(self, arguments: dict) -> dict:
         result = request_snapshot_review(self.vault_root, subject_id=self.subject_id, summary=arguments["summary"])
         return {
             "isError": False,
@@ -708,7 +708,7 @@ class GovernanceBackend:
             "structuredContent": result,
         }
 
-    def _tool_review_snapshot_upgrade(self, arguments: dict) -> dict:
+    def _tool_governance_review_snapshot_upgrade(self, arguments: dict) -> dict:
         result = review_snapshot_upgrade(self.vault_root)
         return {
             "isError": False,
@@ -716,7 +716,7 @@ class GovernanceBackend:
             "structuredContent": result,
         }
 
-    def _tool_apply_snapshot_upgrade(self, arguments: dict) -> dict:
+    def _tool_governance_apply_snapshot_upgrade(self, arguments: dict) -> dict:
         result = apply_snapshot_upgrade_with_proposal(
             self.vault_root,
             subject_id=self.subject_id,

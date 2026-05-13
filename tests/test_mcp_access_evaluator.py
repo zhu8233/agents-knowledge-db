@@ -68,7 +68,7 @@ class McpAccessEvaluatorTests(unittest.TestCase):
                 vault,
                 subject_id="owner@example.com",
                 auth_mode="oauth",
-                tool="apply_registry_update",
+                tool="governance_apply_registry_update",
                 risk_level="L2",
                 target_layer="system",
             )
@@ -87,14 +87,14 @@ class McpAccessEvaluatorTests(unittest.TestCase):
                 vault,
                 subject_id="maintainer@example.com",
                 auth_mode="oauth",
-                tool="apply_registry_update",
+                tool="governance_apply_registry_update",
                 risk_level="L2",
                 target_layer="system",
             )
 
             self.assertEqual(result["decision"], "proposal-only")
             self.assertEqual(result["effective_role"], "vault-maintainer")
-            self.assertEqual(result["suggested_tool"], "propose_registry_update")
+            self.assertEqual(result["suggested_tool"], "governance_propose_registry_update")
 
     def test_vault_user_cannot_run_dbms_admin_tool(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -122,7 +122,7 @@ class McpAccessEvaluatorTests(unittest.TestCase):
                 vault,
                 subject_id="owner@example.com",
                 auth_mode="token",
-                tool="apply_snapshot_upgrade",
+                tool="governance_apply_snapshot_upgrade",
                 risk_level="L4",
                 target_layer="system",
             )

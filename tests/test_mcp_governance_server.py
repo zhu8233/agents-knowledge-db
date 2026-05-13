@@ -139,10 +139,10 @@ class McpGovernanceServerTests(unittest.TestCase):
             tools = backend.list_tools()
             tool_names = [tool["name"] for tool in tools]
 
-            self.assertIn("search_topics", tool_names)
-            self.assertIn("get_topic_context", tool_names)
-            self.assertNotIn("validate_data_repo", tool_names)
-            self.assertNotIn("propose_registry_update", tool_names)
+            self.assertIn("governance_search_topics", tool_names)
+            self.assertIn("governance_get_topic_context", tool_names)
+            self.assertNotIn("governance_validate_data_repo", tool_names)
+            self.assertNotIn("governance_propose_registry_update", tool_names)
 
     def test_whoami_returns_effective_role_and_visible_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -152,16 +152,16 @@ class McpGovernanceServerTests(unittest.TestCase):
             reader_backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
             owner_backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
 
-            reader_result = reader_backend.call_tool("whoami", {})
-            owner_result = owner_backend.call_tool("whoami", {})
+            reader_result = reader_backend.call_tool("governance_whoami", {})
+            owner_result = owner_backend.call_tool("governance_whoami", {})
 
             self.assertFalse(reader_result["isError"])
             self.assertFalse(owner_result["isError"])
             self.assertEqual(reader_result["structuredContent"]["effectiveRole"], "vault-user")
             self.assertEqual(owner_result["structuredContent"]["effectiveRole"], "system-maintainer")
-            self.assertIn("search_topics", reader_result["structuredContent"]["visibleTools"])
-            self.assertNotIn("apply_registry_update", reader_result["structuredContent"]["visibleTools"])
-            self.assertIn("apply_registry_update", owner_result["structuredContent"]["visibleTools"])
+            self.assertIn("governance_search_topics", reader_result["structuredContent"]["visibleTools"])
+            self.assertNotIn("governance_apply_registry_update", reader_result["structuredContent"]["visibleTools"])
+            self.assertIn("governance_apply_registry_update", owner_result["structuredContent"]["visibleTools"])
 
     def test_system_maintainer_tool_list_includes_governance_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -172,15 +172,15 @@ class McpGovernanceServerTests(unittest.TestCase):
             tools = backend.list_tools()
             tool_names = [tool["name"] for tool in tools]
 
-            self.assertIn("validate_data_repo", tool_names)
-            self.assertIn("propose_registry_update", tool_names)
-            self.assertIn("apply_registry_update", tool_names)
-            self.assertIn("list_promotion_queue", tool_names)
-            self.assertIn("review_snapshot_upgrade", tool_names)
-            self.assertIn("apply_snapshot_upgrade", tool_names)
-            self.assertIn("review_promotion_proposal", tool_names)
-            self.assertIn("apply_promotion_proposal", tool_names)
-            self.assertIn("evaluate_access", tool_names)
+            self.assertIn("governance_validate_data_repo", tool_names)
+            self.assertIn("governance_propose_registry_update", tool_names)
+            self.assertIn("governance_apply_registry_update", tool_names)
+            self.assertIn("governance_list_promotion_queue", tool_names)
+            self.assertIn("governance_review_snapshot_upgrade", tool_names)
+            self.assertIn("governance_apply_snapshot_upgrade", tool_names)
+            self.assertIn("governance_review_promotion_proposal", tool_names)
+            self.assertIn("governance_apply_promotion_proposal", tool_names)
+            self.assertIn("governance_evaluate_access", tool_names)
 
     def test_search_topics_matches_title_and_alias(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -189,8 +189,8 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
 
-            by_title = backend.call_tool("search_topics", {"query": "python"})
-            by_alias = backend.call_tool("search_topics", {"query": "py"})
+            by_title = backend.call_tool("governance_search_topics", {"query": "python"})
+            by_alias = backend.call_tool("governance_search_topics", {"query": "py"})
 
             self.assertEqual(by_title["structuredContent"]["totalMatches"], 1)
             self.assertEqual(by_alias["structuredContent"]["totalMatches"], 1)
@@ -202,7 +202,7 @@ class McpGovernanceServerTests(unittest.TestCase):
             self._install_and_seed_vault(vault)
 
             backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
-            result = backend.call_tool("get_topic_context", {"topic_id": "topic.python"})
+            result = backend.call_tool("governance_get_topic_context", {"topic_id": "topic.python"})
 
             self.assertFalse(result["isError"])
             self.assertEqual(result["structuredContent"]["topic"]["topic_id"], "topic.python")
@@ -222,8 +222,8 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             self.assertIn("onboard_agent_to_vault", [item["name"] for item in prompts])
             self.assertIn("prepare_registry_repair", [item["name"] for item in prompts])
-            self.assertIn("review_snapshot_upgrade", [item["name"] for item in prompts])
-            self.assertIn("review_promotion_proposal", [item["name"] for item in prompts])
+            self.assertIn("governance_review_snapshot_upgrade", [item["name"] for item in prompts])
+            self.assertIn("governance_review_promotion_proposal", [item["name"] for item in prompts])
             self.assertIn("governance://rules/root", [item["uri"] for item in resources])
             self.assertIn("governance://registry/governance-proposals", [item["uri"] for item in resources])
             self.assertIn("governance://registry/promotion-queue", [item["uri"] for item in resources])
@@ -248,7 +248,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
             result = backend.call_tool(
-                "propose_registry_update",
+                "governance_propose_registry_update",
                 {
                     "target_kind": "topic",
                     "operation": "upsert_topic",
@@ -272,7 +272,7 @@ class McpGovernanceServerTests(unittest.TestCase):
             self._install_and_seed_vault(vault)
 
             backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
-            result = backend.call_tool("request_snapshot_review", {"summary": "Request snapshot review before upgrade"})
+            result = backend.call_tool("governance_request_snapshot_review", {"summary": "Request snapshot review before upgrade"})
 
             self.assertFalse(result["isError"])
             proposal = result["structuredContent"]["proposal"]
@@ -303,7 +303,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             maintainer_backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
             proposal = maintainer_backend.call_tool(
-                "create_promotion_proposal",
+                "governance_create_promotion_proposal",
                 {
                     "topic_id": "topic.unapproved",
                     "source_path": "10-Curation/Unapproved/summary.md",
@@ -314,7 +314,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             owner_backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
             result = owner_backend.call_tool(
-                "apply_promotion_proposal",
+                "governance_apply_promotion_proposal",
                 {
                     "proposal_id": proposal["proposal_id"],
                     "summary": "Try to apply before approval",
@@ -331,7 +331,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             owner_backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
             result = owner_backend.call_tool(
-                "review_promotion_proposal",
+                "governance_review_promotion_proposal",
                 {
                     "proposal_id": "proposal.missing",
                     "decision": "approve",
@@ -367,7 +367,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             maintainer_backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
             proposal_id = maintainer_backend.call_tool(
-                "create_promotion_proposal",
+                "governance_create_promotion_proposal",
                 {
                     "topic_id": "topic.duplicate-apply",
                     "source_path": "10-Curation/DuplicateApply/summary.md",
@@ -378,7 +378,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             owner_backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
             owner_backend.call_tool(
-                "review_promotion_proposal",
+                "governance_review_promotion_proposal",
                 {
                     "proposal_id": proposal_id,
                     "decision": "approve",
@@ -386,14 +386,14 @@ class McpGovernanceServerTests(unittest.TestCase):
                 },
             )
             owner_backend.call_tool(
-                "apply_promotion_proposal",
+                "governance_apply_promotion_proposal",
                 {
                     "proposal_id": proposal_id,
                     "summary": "First apply",
                 },
             )
             duplicate = owner_backend.call_tool(
-                "apply_promotion_proposal",
+                "governance_apply_promotion_proposal",
                 {
                     "proposal_id": proposal_id,
                     "summary": "Second apply",
@@ -410,7 +410,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
             result = backend.call_tool(
-                "apply_registry_update",
+                "governance_apply_registry_update",
                 {
                     "target_kind": "topic",
                     "operation": "upsert_topic",
@@ -449,7 +449,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
             result = backend.call_tool(
-                "apply_registry_update",
+                "governance_apply_registry_update",
                 {
                     "target_kind": "topic",
                     "operation": "upsert_topic",
@@ -493,7 +493,7 @@ class McpGovernanceServerTests(unittest.TestCase):
             )
 
             backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
-            result = backend.call_tool("review_snapshot_upgrade", {})
+            result = backend.call_tool("governance_review_snapshot_upgrade", {})
 
             self.assertFalse(result["isError"])
             self.assertEqual(result["structuredContent"]["status"], "review-needed")
@@ -506,7 +506,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
             result = backend.call_tool(
-                "create_promotion_proposal",
+                "governance_create_promotion_proposal",
                 {
                     "topic_id": "topic.python",
                     "source_path": "20-KnowledgeHub/Python/index.md",
@@ -535,7 +535,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
             backend.call_tool(
-                "create_promotion_proposal",
+                "governance_create_promotion_proposal",
                 {
                     "topic_id": "topic.python",
                     "source_path": "20-KnowledgeHub/Python/index.md",
@@ -543,7 +543,7 @@ class McpGovernanceServerTests(unittest.TestCase):
                     "summary": "Promote Python index",
                 },
             )
-            result = backend.call_tool("list_promotion_queue", {})
+            result = backend.call_tool("governance_list_promotion_queue", {})
 
             self.assertFalse(result["isError"])
             self.assertEqual(result["structuredContent"]["totalItems"], 1)
@@ -556,7 +556,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             maintainer_backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
             proposal_result = maintainer_backend.call_tool(
-                "create_promotion_proposal",
+                "governance_create_promotion_proposal",
                 {
                     "topic_id": "topic.python",
                     "source_path": "20-KnowledgeHub/Python/index.md",
@@ -568,7 +568,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             owner_backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
             review_result = owner_backend.call_tool(
-                "review_promotion_proposal",
+                "governance_review_promotion_proposal",
                 {
                     "proposal_id": proposal_id,
                     "decision": "approve",
@@ -614,7 +614,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             maintainer_backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
             proposal_result = maintainer_backend.call_tool(
-                "create_promotion_proposal",
+                "governance_create_promotion_proposal",
                 {
                     "topic_id": "topic.promote-me",
                     "source_path": "10-Curation/PromoteMe/summary.md",
@@ -626,7 +626,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             owner_backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
             owner_backend.call_tool(
-                "review_promotion_proposal",
+                "governance_review_promotion_proposal",
                 {
                     "proposal_id": proposal_id,
                     "decision": "approve",
@@ -634,7 +634,7 @@ class McpGovernanceServerTests(unittest.TestCase):
                 },
             )
             apply_result = owner_backend.call_tool(
-                "apply_promotion_proposal",
+                "governance_apply_promotion_proposal",
                 {
                     "proposal_id": proposal_id,
                     "summary": "Apply approved promotion to registry canonical home",
@@ -665,7 +665,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             maintainer_backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
             proposal_result = maintainer_backend.call_tool(
-                "create_promotion_proposal",
+                "governance_create_promotion_proposal",
                 {
                     "topic_id": "topic.python",
                     "source_path": "20-KnowledgeHub/Python/index.md",
@@ -676,7 +676,7 @@ class McpGovernanceServerTests(unittest.TestCase):
             proposal_id = proposal_result["structuredContent"]["proposal"]["proposal_id"]
 
             result = maintainer_backend.call_tool(
-                "review_promotion_proposal",
+                "governance_review_promotion_proposal",
                 {
                     "proposal_id": proposal_id,
                     "decision": "approve",
@@ -712,7 +712,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             maintainer_backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
             proposal_result = maintainer_backend.call_tool(
-                "create_promotion_proposal",
+                "governance_create_promotion_proposal",
                 {
                     "topic_id": "topic.promote-blocked",
                     "source_path": "10-Curation/PromoteBlocked/summary.md",
@@ -723,7 +723,7 @@ class McpGovernanceServerTests(unittest.TestCase):
             proposal_id = proposal_result["structuredContent"]["proposal"]["proposal_id"]
 
             result = maintainer_backend.call_tool(
-                "apply_promotion_proposal",
+                "governance_apply_promotion_proposal",
                 {
                     "proposal_id": proposal_id,
                     "summary": "Attempt unauthorized promotion apply",
@@ -740,7 +740,7 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
             result = backend.call_tool(
-                "create_promotion_proposal",
+                "governance_create_promotion_proposal",
                 {
                     "topic_id": "topic.python",
                     "source_path": "20-KnowledgeHub/Python/index.md",
@@ -773,7 +773,7 @@ class McpGovernanceServerTests(unittest.TestCase):
             )
 
             backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
-            result = backend.call_tool("apply_snapshot_upgrade", {"summary": "Apply latest system snapshot"})
+            result = backend.call_tool("governance_apply_snapshot_upgrade", {"summary": "Apply latest system snapshot"})
 
             self.assertFalse(result["isError"])
             self.assertEqual(result["structuredContent"]["status"], "compatible")
@@ -795,7 +795,7 @@ class McpGovernanceServerTests(unittest.TestCase):
             self._install_and_seed_vault(vault)
 
             backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
-            result = backend.call_tool("apply_snapshot_upgrade", {"summary": "Attempt direct snapshot apply"})
+            result = backend.call_tool("governance_apply_snapshot_upgrade", {"summary": "Attempt direct snapshot apply"})
 
             self.assertTrue(result["isError"])
             self.assertEqual(result["structuredContent"]["decision"], "proposal-only")
@@ -849,8 +849,8 @@ class McpGovernanceServerTests(unittest.TestCase):
 
             self.assertEqual(init_response["result"]["serverInfo"]["name"], "agents-knowledge-db")
             tool_names = [item["name"] for item in tools_response["result"]["tools"]]
-            self.assertIn("search_topics", tool_names)
-            self.assertNotIn("validate_data_repo", tool_names)
+            self.assertIn("governance_search_topics", tool_names)
+            self.assertNotIn("governance_validate_data_repo", tool_names)
 
     def test_launcher_script_supports_stdio_initialize_and_tools_list(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -896,8 +896,8 @@ class McpGovernanceServerTests(unittest.TestCase):
             messages = _read_framed_messages(stdout)
             tools_response = next(item for item in messages if item.get("id") == 2)
             tool_names = [item["name"] for item in tools_response["result"]["tools"]]
-            self.assertIn("whoami", tool_names)
-            self.assertNotIn("apply_snapshot_upgrade", tool_names)
+            self.assertIn("governance_whoami", tool_names)
+            self.assertNotIn("governance_apply_snapshot_upgrade", tool_names)
 
     def test_stdio_end_to_end_promotion_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -932,7 +932,7 @@ class McpGovernanceServerTests(unittest.TestCase):
                         "id": 2,
                         "method": "tools/call",
                         "params": {
-                            "name": "create_promotion_proposal",
+                            "name": "governance_create_promotion_proposal",
                             "arguments": {
                                 "topic_id": "topic.stdio-promote",
                                 "source_path": "10-Curation/StdioPromote/summary.md",
@@ -956,7 +956,7 @@ class McpGovernanceServerTests(unittest.TestCase):
                         "id": 2,
                         "method": "tools/call",
                         "params": {
-                            "name": "review_promotion_proposal",
+                            "name": "governance_review_promotion_proposal",
                             "arguments": {
                                 "proposal_id": proposal_id,
                                 "decision": "approve",
@@ -969,7 +969,7 @@ class McpGovernanceServerTests(unittest.TestCase):
                         "id": 3,
                         "method": "tools/call",
                         "params": {
-                            "name": "apply_promotion_proposal",
+                            "name": "governance_apply_promotion_proposal",
                             "arguments": {
                                 "proposal_id": proposal_id,
                                 "summary": "Apply via stdio",
