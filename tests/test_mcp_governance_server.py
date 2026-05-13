@@ -192,9 +192,13 @@ class McpGovernanceServerTests(unittest.TestCase):
             by_title = backend.call_tool("governance_search_topics", {"query": "python"})
             by_alias = backend.call_tool("governance_search_topics", {"query": "py"})
 
-            self.assertEqual(by_title["structuredContent"]["totalMatches"], 1)
-            self.assertEqual(by_alias["structuredContent"]["totalMatches"], 1)
+            self.assertEqual(by_title["structuredContent"]["total"], 1)
+            self.assertEqual(by_alias["structuredContent"]["total"], 1)
             self.assertEqual(by_title["structuredContent"]["matches"][0]["topic_id"], "topic.python")
+            self.assertEqual(by_title["structuredContent"]["count"], 1)
+            self.assertEqual(by_title["structuredContent"]["offset"], 0)
+            self.assertEqual(by_title["structuredContent"]["has_more"], False)
+            self.assertIsNone(by_title["structuredContent"]["next_offset"])
 
     def test_get_topic_context_returns_topic_objects_and_findings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -546,7 +550,11 @@ class McpGovernanceServerTests(unittest.TestCase):
             result = backend.call_tool("governance_list_promotion_queue", {})
 
             self.assertFalse(result["isError"])
-            self.assertEqual(result["structuredContent"]["totalItems"], 1)
+            self.assertEqual(result["structuredContent"]["total"], 1)
+            self.assertEqual(result["structuredContent"]["count"], 1)
+            self.assertEqual(result["structuredContent"]["offset"], 0)
+            self.assertEqual(result["structuredContent"]["has_more"], False)
+            self.assertIsNone(result["structuredContent"]["next_offset"])
             self.assertEqual(result["structuredContent"]["items"][0]["status"], "proposed")
 
     def test_system_maintainer_can_approve_promotion_proposal(self) -> None:
@@ -657,6 +665,192 @@ class McpGovernanceServerTests(unittest.TestCase):
             last_entry = json.loads(ledger_lines[-1])
             self.assertEqual(last_entry["operation"], "promotion_proposal_apply")
             self.assertEqual(last_entry["topic_id"], "topic.promote-me")
+
+    def test_list_topic_findings_pagination_respects_limit_and_offset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            findings_path = vault / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index" / "findings.json"
+            findings = json.loads(findings_path.read_text(encoding="utf-8"))
+            for i in range(1, 6):
+                findings["items"].append(
+                    {
+                        "finding_id": f"finding.pag{i}",
+                        "finding_type": "frontmatter_missing",
+                        "topic_id": "topic.python",
+                        "path": f"20-KnowledgeHub/Python/page{i}.md",
+                        "severity": "medium",
+                        "status": "open",
+                    }
+                )
+            findings_path.write_text(json.dumps(findings, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
+
+            page1 = backend.call_tool("governance_list_topic_findings", {"topic_id": "topic.python", "limit": 2, "offset": 0})
+            self.assertEqual(page1["structuredContent"]["total"], 6)
+            self.assertEqual(page1["structuredContent"]["count"], 2)
+            self.assertEqual(page1["structuredContent"]["offset"], 0)
+            self.assertTrue(page1["structuredContent"]["has_more"])
+            self.assertEqual(page1["structuredContent"]["next_offset"], 2)
+
+            page2 = backend.call_tool("governance_list_topic_findings", {"topic_id": "topic.python", "limit": 2, "offset": 2})
+            self.assertEqual(page2["structuredContent"]["count"], 2)
+            self.assertEqual(page2["structuredContent"]["offset"], 2)
+            self.assertTrue(page2["structuredContent"]["has_more"])
+            self.assertEqual(page2["structuredContent"]["next_offset"], 4)
+
+            page3 = backend.call_tool("governance_list_topic_findings", {"topic_id": "topic.python", "limit": 2, "offset": 4})
+            self.assertEqual(page3["structuredContent"]["count"], 2)
+            self.assertEqual(page3["structuredContent"]["offset"], 4)
+            self.assertFalse(page3["structuredContent"]["has_more"])
+            self.assertIsNone(page3["structuredContent"]["next_offset"])
+
+    def test_list_promotion_queue_pagination_respects_limit_and_offset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
+            for i in range(1, 6):
+                backend.call_tool(
+                    "governance_create_promotion_proposal",
+                    {
+                        "topic_id": "topic.python",
+                        "source_path": f"20-KnowledgeHub/Python/page{i}.md",
+                        "candidate_path": f"20-KnowledgeHub/Python/page{i}.md",
+                        "summary": f"Promote page {i}",
+                    },
+                )
+
+            page1 = backend.call_tool("governance_list_promotion_queue", {"limit": 2, "offset": 0})
+            self.assertEqual(page1["structuredContent"]["total"], 5)
+            self.assertEqual(page1["structuredContent"]["count"], 2)
+            self.assertEqual(page1["structuredContent"]["offset"], 0)
+            self.assertTrue(page1["structuredContent"]["has_more"])
+            self.assertEqual(page1["structuredContent"]["next_offset"], 2)
+
+            page2 = backend.call_tool("governance_list_promotion_queue", {"limit": 2, "offset": 2})
+            self.assertEqual(page2["structuredContent"]["count"], 2)
+            self.assertEqual(page2["structuredContent"]["offset"], 2)
+            self.assertTrue(page2["structuredContent"]["has_more"])
+            self.assertEqual(page2["structuredContent"]["next_offset"], 4)
+
+            page3 = backend.call_tool("governance_list_promotion_queue", {"limit": 2, "offset": 4})
+            self.assertEqual(page3["structuredContent"]["count"], 1)
+            self.assertEqual(page3["structuredContent"]["offset"], 4)
+            self.assertFalse(page3["structuredContent"]["has_more"])
+            self.assertIsNone(page3["structuredContent"]["next_offset"])
+
+    def test_search_topics_pagination_edge_cases(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            registry_path = vault / ".knowledge-registry" / "vault-registry.json"
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            for i in range(1, 4):
+                registry["topics"].append(
+                    {
+                        "topic_id": f"topic.edge{i}",
+                        "title": f"Edge Topic {i}",
+                        "aliases": [f"edge{i}"],
+                        "status": "active",
+                        "source_domains": ["test"],
+                        "intake_paths": [f"ProjectRaw/Edge{i}"],
+                        "curation_paths": [f"20-KnowledgeHub/Edge{i}"],
+                        "canonical_home": None,
+                        "related_topics": [],
+                        "upstream_bindings": [],
+                    }
+                )
+            registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
+
+            # offset beyond total returns empty, has_more=False
+            beyond = backend.call_tool("governance_search_topics", {"query": "edge", "limit": 2, "offset": 10})
+            self.assertEqual(beyond["structuredContent"]["total"], 3)
+            self.assertEqual(beyond["structuredContent"]["count"], 0)
+            self.assertEqual(beyond["structuredContent"]["offset"], 10)
+            self.assertFalse(beyond["structuredContent"]["has_more"])
+            self.assertIsNone(beyond["structuredContent"]["next_offset"])
+
+            # limit larger than total returns all, has_more=False
+            large_limit = backend.call_tool("governance_search_topics", {"query": "edge", "limit": 100, "offset": 0})
+            self.assertEqual(large_limit["structuredContent"]["total"], 3)
+            self.assertEqual(large_limit["structuredContent"]["count"], 3)
+            self.assertFalse(large_limit["structuredContent"]["has_more"])
+            self.assertIsNone(large_limit["structuredContent"]["next_offset"])
+
+            # default values (no limit/offset provided)
+            defaults = backend.call_tool("governance_search_topics", {"query": "edge"})
+            self.assertEqual(defaults["structuredContent"]["total"], 3)
+            self.assertEqual(defaults["structuredContent"]["count"], 3)
+            self.assertEqual(defaults["structuredContent"]["offset"], 0)
+            self.assertFalse(defaults["structuredContent"]["has_more"])
+            self.assertIsNone(defaults["structuredContent"]["next_offset"])
+
+    def test_pagination_parameter_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
+
+            invalid_limit = backend.call_tool("governance_search_topics", {"query": "python", "limit": 0})
+            self.assertTrue(invalid_limit["isError"])
+            self.assertIn("limit must be >= 1", invalid_limit["content"][0]["text"])
+
+            invalid_offset = backend.call_tool("governance_search_topics", {"query": "python", "offset": -1})
+            self.assertTrue(invalid_offset["isError"])
+            self.assertIn("offset must be >= 0", invalid_offset["content"][0]["text"])
+
+    def test_search_topics_pagination_respects_limit_and_offset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            registry_path = vault / ".knowledge-registry" / "vault-registry.json"
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            for i in range(1, 6):
+                registry["topics"].append(
+                    {
+                        "topic_id": f"topic.pag{i}",
+                        "title": f"Pagination Topic {i}",
+                        "aliases": [f"pag{i}"],
+                        "status": "active",
+                        "source_domains": ["test"],
+                        "intake_paths": [f"ProjectRaw/Pag{i}"],
+                        "curation_paths": [f"20-KnowledgeHub/Pag{i}"],
+                        "canonical_home": None,
+                        "related_topics": [],
+                        "upstream_bindings": [],
+                    }
+                )
+            registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
+
+            page1 = backend.call_tool("governance_search_topics", {"query": "pag", "limit": 2, "offset": 0})
+            self.assertEqual(page1["structuredContent"]["total"], 5)
+            self.assertEqual(page1["structuredContent"]["count"], 2)
+            self.assertEqual(page1["structuredContent"]["offset"], 0)
+            self.assertTrue(page1["structuredContent"]["has_more"])
+            self.assertEqual(page1["structuredContent"]["next_offset"], 2)
+
+            page2 = backend.call_tool("governance_search_topics", {"query": "pag", "limit": 2, "offset": 2})
+            self.assertEqual(page2["structuredContent"]["count"], 2)
+            self.assertEqual(page2["structuredContent"]["offset"], 2)
+            self.assertTrue(page2["structuredContent"]["has_more"])
+            self.assertEqual(page2["structuredContent"]["next_offset"], 4)
+
+            page3 = backend.call_tool("governance_search_topics", {"query": "pag", "limit": 2, "offset": 4})
+            self.assertEqual(page3["structuredContent"]["count"], 1)
+            self.assertEqual(page3["structuredContent"]["offset"], 4)
+            self.assertFalse(page3["structuredContent"]["has_more"])
+            self.assertIsNone(page3["structuredContent"]["next_offset"])
 
     def test_vault_maintainer_cannot_review_promotion_proposal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

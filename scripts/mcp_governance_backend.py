@@ -12,6 +12,8 @@ from registry_updates import apply_registry_update_with_proposal, propose_regist
 from snapshot_upgrade import apply_snapshot_upgrade_with_proposal, request_snapshot_review, review_snapshot_upgrade
 
 
+DEFAULT_PAGE_LIMIT = 20
+
 SERVER_INFO = {
     "name": "agents-knowledge-db",
     "version": "0.1.0",
@@ -105,7 +107,11 @@ class GovernanceBackend:
                 "inputSchema": {
                     "type": "object",
                     "required": ["query"],
-                    "properties": {"query": {"type": "string"}},
+                    "properties": {
+                        "query": {"type": "string"},
+                        "limit": {"type": "integer", "default": DEFAULT_PAGE_LIMIT, "minimum": 1, "maximum": 100},
+                        "offset": {"type": "integer", "default": 0, "minimum": 0},
+                    },
                     "additionalProperties": False,
                 },
             },
@@ -132,7 +138,11 @@ class GovernanceBackend:
                 "annotations": {"readOnlyHint": True},
                 "inputSchema": {
                     "type": "object",
-                    "properties": {"topic_id": {"type": "string"}},
+                    "properties": {
+                        "topic_id": {"type": "string"},
+                        "limit": {"type": "integer", "default": DEFAULT_PAGE_LIMIT, "minimum": 1, "maximum": 100},
+                        "offset": {"type": "integer", "default": 0, "minimum": 0},
+                    },
                     "additionalProperties": False,
                 },
             },
@@ -200,7 +210,14 @@ class GovernanceBackend:
                 "risk_level": "L0",
                 "target_layer": "system",
                 "annotations": {"readOnlyHint": True},
-                "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "integer", "default": DEFAULT_PAGE_LIMIT, "minimum": 1, "maximum": 100},
+                        "offset": {"type": "integer", "default": 0, "minimum": 0},
+                    },
+                    "additionalProperties": False,
+                },
             },
             {
                 "name": "governance_apply_registry_update",
@@ -316,6 +333,33 @@ class GovernanceBackend:
                 },
             },
         ]
+
+    def _paginate(self, items: list[dict], limit: int | None, offset: int | None) -> dict:
+        limit = limit if limit is not None else DEFAULT_PAGE_LIMIT
+        offset = offset if offset is not None else 0
+
+        if not isinstance(limit, int):
+            raise ValueError("limit must be an integer")
+        if not isinstance(offset, int):
+            raise ValueError("offset must be an integer")
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        if offset < 0:
+            raise ValueError("offset must be >= 0")
+
+        total = len(items)
+        paginated = items[offset:offset + limit]
+        count = len(paginated)
+        has_more = total > offset + count
+        next_offset = offset + count if has_more else None
+        return {
+            "total": total,
+            "count": count,
+            "offset": offset,
+            "has_more": has_more,
+            "next_offset": next_offset,
+            "items": paginated,
+        }
 
     def _evaluate(self, tool_name: str, risk_level: str, target_layer: str) -> dict:
         return evaluate_access(
@@ -479,6 +523,8 @@ class GovernanceBackend:
 
     def _tool_governance_search_topics(self, arguments: dict) -> dict:
         query = arguments["query"].strip().lower()
+        limit = arguments.get("limit")
+        offset = arguments.get("offset")
         registry = self._registry()
         matches = []
         for topic in registry.get("topics", []):
@@ -492,11 +538,20 @@ class GovernanceBackend:
                         "canonical_home": topic.get("canonical_home"),
                     }
                 )
-        text = f"Matched {len(matches)} topic(s) for query `{arguments['query']}`."
+        page = self._paginate(matches, limit, offset)
+        text = f"Matched {page['total']} topic(s) for query `{arguments['query']}`; showing {page['count']}."
         return {
             "isError": False,
             "content": [{"type": "text", "text": text}],
-            "structuredContent": {"query": arguments["query"], "totalMatches": len(matches), "matches": matches},
+            "structuredContent": {
+                "query": arguments["query"],
+                "total": page["total"],
+                "count": page["count"],
+                "offset": page["offset"],
+                "has_more": page["has_more"],
+                "next_offset": page["next_offset"],
+                "matches": page["items"],
+            },
         }
 
     def _tool_governance_get_topic_context(self, arguments: dict) -> dict:
@@ -532,14 +587,25 @@ class GovernanceBackend:
 
     def _tool_governance_list_topic_findings(self, arguments: dict) -> dict:
         topic_id = arguments.get("topic_id")
+        limit = arguments.get("limit")
+        offset = arguments.get("offset")
         findings = self._findings().get("items", [])
         if topic_id:
             findings = [item for item in findings if item.get("topic_id") == topic_id]
-        text = f"Returned {len(findings)} finding(s)."
+        page = self._paginate(findings, limit, offset)
+        text = f"Returned {page['total']} finding(s); showing {page['count']}."
         return {
             "isError": False,
             "content": [{"type": "text", "text": text}],
-            "structuredContent": {"topic_id": topic_id, "items": findings, "totalFindings": len(findings)},
+            "structuredContent": {
+                "topic_id": topic_id,
+                "total": page["total"],
+                "count": page["count"],
+                "offset": page["offset"],
+                "has_more": page["has_more"],
+                "next_offset": page["next_offset"],
+                "items": page["items"],
+            },
         }
 
     def _tool_governance_validate_data_repo(self, arguments: dict) -> dict:
@@ -621,11 +687,23 @@ class GovernanceBackend:
         }
 
     def _tool_governance_list_promotion_queue(self, arguments: dict) -> dict:
+        limit = arguments.get("limit")
+        offset = arguments.get("offset")
         result = list_promotion_queue(self.vault_root)
+        items = result.get("items", [])
+        page = self._paginate(items, limit, offset)
         return {
             "isError": False,
-            "content": [{"type": "text", "text": f"Returned {result['totalItems']} promotion queue item(s)."}],
-            "structuredContent": result,
+            "content": [{"type": "text", "text": f"Returned {page['total']} promotion queue item(s); showing {page['count']}."}],
+            "structuredContent": {
+                "items": page["items"],
+                "total": page["total"],
+                "count": page["count"],
+                "offset": page["offset"],
+                "has_more": page["has_more"],
+                "next_offset": page["next_offset"],
+                "lastUpdated": result.get("lastUpdated"),
+            },
         }
 
     def _tool_governance_apply_registry_update(self, arguments: dict) -> dict:
