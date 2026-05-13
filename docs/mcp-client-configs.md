@@ -19,22 +19,20 @@ python scripts/run_mcp_server.py /path/to/your-vault --subject-id owner@example.
 
 ## Codex
 
-```json
-{
-  "mcpServers": {
-    "agents-knowledge-db": {
-      "command": "python",
-      "args": [
-        "F:/01-NativeLearnStore/obsidian_native/obsidian-vault-governance-kit/scripts/run_mcp_server.py",
-        "D:/your-governed-vault",
-        "--subject-id",
-        "owner@example.com",
-        "--auth-mode",
-        "oauth"
-      ]
-    }
-  }
-}
+Add this to `C:\Users\<you>\.codex\config.toml`:
+
+```toml
+[mcp_servers.agents-knowledge-db]
+type = "stdio"
+command = "python"
+args = [
+  "F:/01-NativeLearnStore/obsidian_native/obsidian-vault-governance-kit/scripts/run_mcp_server.py",
+  "D:/your-governed-vault",
+  "--subject-id",
+  "owner@example.com",
+  "--auth-mode",
+  "oauth",
+]
 ```
 
 ## Claude Desktop

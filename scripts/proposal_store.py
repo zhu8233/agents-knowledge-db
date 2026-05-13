@@ -78,6 +78,7 @@ def update_proposal_status(
     new_status: str,
     actor: str,
     summary: str | None = None,
+    metadata_updates: dict | None = None,
 ) -> dict:
     if new_status not in VALID_STATUSES:
         raise ValueError(f"Invalid proposal status: {new_status}")
@@ -103,6 +104,8 @@ def update_proposal_status(
         updated["status"] = new_status
         if summary is not None:
             updated["summary"] = summary
+        if metadata_updates:
+            updated.update(metadata_updates)
         if new_status in {"approved", "rejected"}:
             updated["reviewed_by"] = actor
             updated["reviewed_at"] = changed_at
@@ -118,3 +121,24 @@ def update_proposal_status(
     store["last_updated"] = changed_at[:10]
     path.write_text(json.dumps(store, ensure_ascii=False, indent=2), encoding="utf-8")
     return updated
+
+
+def ensure_proposal_transition_allowed(
+    vault_root: Path,
+    *,
+    proposal_id: str,
+    new_status: str,
+    expected_type: str | None = None,
+) -> dict:
+    proposal = get_proposal(vault_root, proposal_id)
+    if expected_type is not None and proposal.get("proposal_type") != expected_type:
+        raise ValueError(f"Proposal `{proposal_id}` is not a `{expected_type}` proposal")
+
+    current_status = proposal.get("status")
+    if current_status == "applied":
+        raise ValueError(f"Proposal `{proposal_id}` is already applied")
+    if current_status == "rejected" and new_status != "rejected":
+        raise ValueError(f"Proposal `{proposal_id}` is rejected and cannot transition to `{new_status}`")
+    if current_status != "approved" and new_status == "applied":
+        raise ValueError(f"Proposal `{proposal_id}` must be approved before apply")
+    return proposal

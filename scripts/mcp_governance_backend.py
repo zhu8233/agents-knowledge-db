@@ -3,16 +3,46 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from mcp_access import evaluate_access, load_json
 from promotion_queue import apply_promotion_proposal, create_promotion_proposal, list_promotion_queue, review_promotion_proposal
-from proposal_store import list_proposals
+from proposal_store import get_proposal, list_proposals
 from registry_updates import apply_registry_update_with_proposal, propose_registry_update
-from snapshot_upgrade import apply_snapshot_upgrade_with_proposal, request_snapshot_review, review_snapshot_upgrade
+from snapshot_upgrade import (
+    apply_snapshot_upgrade_with_proposal,
+    current_snapshot_apply_context,
+    request_snapshot_review,
+    review_snapshot_upgrade,
+)
 
 
 DEFAULT_PAGE_LIMIT = 20
+APPROVAL_INPUT_SCHEMA = {
+    "type": "object",
+    "required": ["approved_by", "approved_at", "evidence"],
+    "properties": {
+        "approved_by": {"type": "string"},
+        "approved_at": {"type": "string"},
+        "evidence": {"type": "string"},
+        "snapshot_ref": {"type": "string"},
+        "compatibility_ref": {"type": ["string", "null"]},
+    },
+    "additionalProperties": False,
+}
+SNAPSHOT_APPROVAL_INPUT_SCHEMA = {
+    "type": "object",
+    "required": ["approved_by", "approved_at", "evidence", "snapshot_ref", "compatibility_ref"],
+    "properties": {
+        "approved_by": {"type": "string"},
+        "approved_at": {"type": "string"},
+        "evidence": {"type": "string"},
+        "snapshot_ref": {"type": "string"},
+        "compatibility_ref": {"type": ["string", "null"]},
+    },
+    "additionalProperties": False,
+}
 
 SERVER_INFO = {
     "name": "agents-knowledge-db",
@@ -283,6 +313,8 @@ class GovernanceBackend:
                     "type": "object",
                     "properties": {
                         "proposal": {"type": "object"},
+                        "review": {"type": "object"},
+                        "applyContext": {"type": "object"},
                     },
                 },
             },
@@ -406,6 +438,7 @@ class GovernanceBackend:
                         "proposal_id": {"type": "string"},
                         "decision": {"type": "string", "enum": ["approve", "reject"]},
                         "summary": {"type": "string"},
+                        "approval": APPROVAL_INPUT_SCHEMA,
                     },
                     "additionalProperties": False,
                 },
@@ -522,9 +555,10 @@ class GovernanceBackend:
                     "properties": {
                         "status": {"type": "string"},
                         "upgradeAvailable": {"type": "boolean"},
-                        "currentTag": {"type": ["string", "null"]},
-                        "latestTag": {"type": ["string", "null"]},
-                        "compatibility": {"type": ["string", "null"]},
+                        "snapshotRef": {"type": ["string", "null"]},
+                        "compatibilityRef": {"type": ["string", "null"]},
+                        "snapshotVersion": {"type": "object"},
+                        "compatibilityStatus": {"type": "object"},
                     },
                 },
             },
@@ -545,17 +579,19 @@ class GovernanceBackend:
                     "required": ["summary"],
                     "properties": {
                         "summary": {"type": "string"},
-                        "proposal_id": {"type": "string"}
+                        "proposal_id": {"type": "string"},
+                        "approval": SNAPSHOT_APPROVAL_INPUT_SCHEMA,
                     },
                     "additionalProperties": False,
                 },
                 "outputSchema": {
                     "type": "object",
                     "properties": {
+                        "snapshotRef": {"type": ["string", "null"]},
                         "status": {"type": "string"},
-                        "system_tag": {"type": "string"},
-                        "override_checked_at": {"type": "string"},
-                        "notes": {"type": ["string", "null"]},
+                        "compatibilityStatus": {"type": "object"},
+                        "ledgerEntry": {"type": "object"},
+                        "governanceProposal": {"type": "object"},
                     },
                 },
             },
@@ -601,6 +637,161 @@ class GovernanceBackend:
     def _allowed_tool(self, tool: dict) -> bool:
         decision = self._evaluate(tool["name"], tool["risk_level"], tool["target_layer"])
         return decision.get("decision") == "allow"
+
+    def _validate_explicit_approval(self, approval: object, *, snapshot_review: dict | None = None) -> dict:
+        if not isinstance(approval, dict):
+            raise ValueError("approval must be an object")
+
+        normalized = {}
+        missing = []
+        required_fields = ["approved_by", "approved_at", "evidence"]
+        if snapshot_review is not None:
+            required_fields.extend(["snapshot_ref", "compatibility_ref"])
+        for field in required_fields:
+            value = approval.get(field)
+            if field == "compatibility_ref":
+                if value is None:
+                    normalized[field] = None
+                    continue
+                if not isinstance(value, str) or not value.strip():
+                    missing.append(field)
+                    continue
+                normalized[field] = value.strip()
+                continue
+            if not isinstance(value, str) or not value.strip():
+                missing.append(field)
+                continue
+            normalized[field] = value.strip()
+
+        if missing:
+            joined = ", ".join(missing)
+            raise ValueError(f"approval is missing required non-empty field(s): {joined}")
+        if normalized["approved_by"] != self.subject_id:
+            raise ValueError("approval.approved_by must match the authenticated subject")
+        try:
+            datetime.fromisoformat(normalized["approved_at"].replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("approval.approved_at must be a valid ISO-8601 timestamp") from exc
+        if snapshot_review is not None:
+            if normalized["snapshot_ref"] != snapshot_review.get("snapshotRef"):
+                raise ValueError("approval.snapshot_ref must match the current snapshot review")
+            if normalized["compatibility_ref"] != snapshot_review.get("compatibilityRef"):
+                raise ValueError("approval.compatibility_ref must match the current snapshot review")
+        return normalized
+
+    def _approval_gate_error(
+        self,
+        name: str,
+        decision: dict,
+        *,
+        detail: str,
+        proposal: dict | None = None,
+        required_evidence: list[str] | None = None,
+    ) -> dict:
+        if proposal is not None:
+            detail = (
+                f"{detail} proposal `{proposal['proposal_id']}` is currently `{proposal.get('status')}`."
+            )
+
+        structured = {
+            **decision,
+            "tool": name,
+            "required_evidence": required_evidence or ["approved proposal", "explicit approval evidence"],
+        }
+        if proposal is not None:
+            structured["proposal_status"] = proposal.get("status")
+            structured["proposal_type"] = proposal.get("proposal_type")
+
+        return {
+            "isError": True,
+            "content": [{"type": "text", "text": f"Tool `{name}` requires additional approval. {detail}"}],
+            "structuredContent": structured,
+        }
+
+    def _current_snapshot_review(self) -> dict:
+        return current_snapshot_apply_context(self.vault_root)
+
+    def _snapshot_proposal_matches_current_review(self, proposal: dict) -> bool:
+        details = proposal.get("details") or {}
+        current_review = self._current_snapshot_review()
+        return (
+            details.get("snapshotRef") == current_review.get("snapshotRef")
+            and details.get("compatibilityRef") == current_review.get("compatibilityRef")
+        )
+
+    def _has_required_approval(self, name: str, decision: dict, arguments: dict) -> dict | None:
+        if name not in {"governance_review_promotion_proposal", "governance_apply_snapshot_upgrade"}:
+            return None
+        if not decision.get("requires_approval") or decision.get("risk_level") not in {"L3", "L4"}:
+            return None
+
+        snapshot_review = self._current_snapshot_review() if name == "governance_apply_snapshot_upgrade" else None
+        if snapshot_review is not None:
+            arguments["_validated_snapshot_context"] = snapshot_review
+        approval = arguments.get("approval")
+        if approval is not None:
+            arguments["approval"] = self._validate_explicit_approval(approval, snapshot_review=snapshot_review)
+
+        proposal = None
+        proposal_id = arguments.get("proposal_id")
+        if isinstance(proposal_id, str) and proposal_id.strip():
+            normalized_proposal_id = proposal_id.strip()
+            arguments["proposal_id"] = normalized_proposal_id
+            proposal = get_proposal(self.vault_root, normalized_proposal_id)
+
+        if name == "governance_review_promotion_proposal":
+            if approval is not None:
+                return None
+            return self._approval_gate_error(
+                name,
+                decision,
+                detail="Provide explicit approval evidence.",
+                proposal=proposal,
+                required_evidence=["explicit approval evidence"],
+            )
+
+        if proposal is not None:
+            if proposal.get("proposal_type") != "snapshot_upgrade":
+                return self._approval_gate_error(
+                    name,
+                    decision,
+                    detail="Provide an approved proposal or explicit approval evidence for `snapshot_upgrade`.",
+                    proposal=proposal,
+                )
+            if not self._snapshot_proposal_matches_current_review(proposal):
+                return self._approval_gate_error(
+                    name,
+                    decision,
+                    detail="Provide an approved proposal or explicit approval evidence for the current `snapshot_upgrade`; the supplied proposal does not match the current snapshot review.",
+                    proposal=proposal,
+                )
+            if proposal.get("status") in {"rejected", "applied"}:
+                return self._approval_gate_error(
+                    name,
+                    decision,
+                    detail="Provide an approved proposal or explicit approval evidence for the current `snapshot_upgrade`; the supplied proposal is not in a usable state.",
+                    proposal=proposal,
+                )
+            if proposal.get("status") == "approved":
+                return None
+            if approval is not None:
+                return None
+            return self._approval_gate_error(
+                name,
+                decision,
+                detail="Provide an approved proposal or explicit approval evidence for `snapshot_upgrade`.",
+                proposal=proposal,
+            )
+
+        if approval is not None:
+            return None
+
+        return self._approval_gate_error(
+            name,
+            decision,
+            detail="Provide an approved proposal or explicit approval evidence for `snapshot_upgrade`.",
+            proposal=proposal,
+        )
 
     def list_tools(self) -> list[dict]:
         return [tool for tool in self._tool_catalog() if self._allowed_tool(tool)]
@@ -740,8 +931,11 @@ class GovernanceBackend:
         handler_name = f"_tool_{name}"
         handler = getattr(self, handler_name)
         try:
+            approval_error = self._has_required_approval(name, decision, arguments)
+            if approval_error is not None:
+                return approval_error
             return handler(arguments)
-        except ValueError as exc:
+        except (ValueError, RuntimeError) as exc:
             return {
                 "isError": True,
                 "content": [{"type": "text", "text": str(exc)}],
@@ -970,6 +1164,7 @@ class GovernanceBackend:
             proposal_id=arguments["proposal_id"],
             decision=arguments["decision"],
             summary=arguments["summary"],
+            approval=arguments.get("approval"),
         )
         return {
             "isError": False,
@@ -1027,6 +1222,8 @@ class GovernanceBackend:
             subject_id=self.subject_id,
             summary=arguments["summary"],
             proposal_id=arguments.get("proposal_id"),
+            approval=arguments.get("approval"),
+            expected_snapshot_context=arguments.get("_validated_snapshot_context"),
         )
         return {
             "isError": False,

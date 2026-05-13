@@ -48,6 +48,16 @@ The result should then return one of:
 
 and whether elevated approval is required.
 
+When the resolved action is `L3-L4` and `requires_approval` is `true`, execution must still stop unless the caller supplies either:
+
+- an approved governance `proposal_id`
+- explicit approval evidence attached to the MCP tool call
+
+For snapshot apply, both approval paths must stay bound to the current apply context:
+
+- approved proposals must be `snapshot_upgrade` proposals that match the current `snapshotRef` and `compatibilityRef`
+- explicit approval evidence must match the authenticated subject and the current `snapshot_ref` / `compatibility_ref`
+
 ## Recommended Roles
 
 - `system-maintainer`
@@ -58,4 +68,4 @@ and whether elevated approval is required.
 
 - `vault-user`: read-only
 - `vault-maintainer`: read + proposal path
-- `system-maintainer`: full governance path with approval on `L3-L4`
+- `system-maintainer`: full governance path with approval on `L3-L4`, plus execution-time proof through a matching approved proposal or context-bound explicit approval evidence

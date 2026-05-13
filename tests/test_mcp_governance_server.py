@@ -130,6 +130,19 @@ class McpGovernanceServerTests(unittest.TestCase):
         }
         findings_path.write_text(json.dumps(findings, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def _snapshot_approval(self, vault: Path, **overrides: object) -> dict:
+        version = json.loads((vault / ".dbms-system" / "version.json").read_text(encoding="utf-8"))
+        compat = json.loads((vault / "LocalOverrides" / "compatibility-status.json").read_text(encoding="utf-8"))
+        approval = {
+            "approved_by": "owner@example.com",
+            "approved_at": "2026-05-13T12:00:00Z",
+            "evidence": "Manual approval recorded for snapshot apply",
+            "snapshot_ref": version.get("snapshot_ref") or version.get("release_tag") or version.get("source_commit"),
+            "compatibility_ref": compat.get("system_tag"),
+        }
+        approval.update(overrides)
+        return approval
+
     def test_vault_user_tool_list_hides_admin_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             vault = Path(tmp) / "vault"
@@ -282,6 +295,35 @@ class McpGovernanceServerTests(unittest.TestCase):
             proposal = result["structuredContent"]["proposal"]
             self.assertEqual(proposal["proposal_type"], "snapshot_upgrade")
 
+    def test_system_maintainer_can_apply_snapshot_upgrade_with_explicit_approval_and_pending_proposal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            maintainer_backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
+            request_result = maintainer_backend.call_tool(
+                "governance_request_snapshot_review",
+                {"summary": "Request snapshot review before upgrade"},
+            )
+            proposal_id = request_result["structuredContent"]["proposal"]["proposal_id"]
+
+            owner_backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            result = owner_backend.call_tool(
+                "governance_apply_snapshot_upgrade",
+                {
+                    "summary": "Apply latest system snapshot",
+                    "proposal_id": proposal_id,
+                    "approval": self._snapshot_approval(
+                        vault,
+                        evidence="Manual approval recorded for requested snapshot apply",
+                    ),
+                },
+            )
+
+            self.assertFalse(result["isError"])
+            self.assertEqual(result["structuredContent"]["governanceProposal"]["status"], "applied")
+            self.assertEqual(result["structuredContent"]["governanceProposal"]["approval_evidence"]["approved_by"], "owner@example.com")
+
     def test_apply_promotion_proposal_requires_approved_status(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             vault = Path(tmp) / "vault"
@@ -340,6 +382,11 @@ class McpGovernanceServerTests(unittest.TestCase):
                     "proposal_id": "proposal.missing",
                     "decision": "approve",
                     "summary": "Missing proposal",
+                    "approval": {
+                        "approved_by": "owner@example.com",
+                        "approved_at": "2026-05-13T12:00:00Z",
+                        "evidence": "Manual approval recorded for canonical-impacting review",
+                    },
                 },
             )
 
@@ -387,6 +434,11 @@ class McpGovernanceServerTests(unittest.TestCase):
                     "proposal_id": proposal_id,
                     "decision": "approve",
                     "summary": "Approved",
+                    "approval": {
+                        "approved_by": "owner@example.com",
+                        "approved_at": "2026-05-13T12:00:00Z",
+                        "evidence": "Manual approval recorded for canonical-impacting review",
+                    },
                 },
             )
             owner_backend.call_tool(
@@ -581,6 +633,11 @@ class McpGovernanceServerTests(unittest.TestCase):
                     "proposal_id": proposal_id,
                     "decision": "approve",
                     "summary": "Promotion approved for canonical review",
+                    "approval": {
+                        "approved_by": "owner@example.com",
+                        "approved_at": "2026-05-13T12:00:00Z",
+                        "evidence": "Manual approval recorded for canonical-impacting review",
+                    },
                 },
             )
 
@@ -591,11 +648,80 @@ class McpGovernanceServerTests(unittest.TestCase):
             queue = json.loads((vault / ".knowledge-registry" / "promotion-queue.json").read_text(encoding="utf-8"))
             item = next(item for item in queue["items"] if item["proposal_id"] == proposal_id)
             self.assertEqual(item["status"], "approved")
+            self.assertEqual(item["approval_evidence"]["approved_by"], "owner@example.com")
 
             ledger_lines = [line for line in (vault / ".knowledge-registry" / "change-ledger.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
             last_entry = json.loads(ledger_lines[-1])
             self.assertEqual(last_entry["operation"], "promotion_proposal_review")
             self.assertEqual(last_entry["topic_id"], "topic.python")
+            self.assertEqual(last_entry["approval_evidence"]["approved_by"], "owner@example.com")
+
+    def test_system_maintainer_cannot_review_promotion_proposal_without_approval_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            maintainer_backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
+            proposal_result = maintainer_backend.call_tool(
+                "governance_create_promotion_proposal",
+                {
+                    "topic_id": "topic.python",
+                    "source_path": "20-KnowledgeHub/Python/index.md",
+                    "candidate_path": "20-KnowledgeHub/Python/index.md",
+                    "summary": "Promote Python index",
+                },
+            )
+            proposal_id = proposal_result["structuredContent"]["proposal"]["proposal_id"]
+
+            owner_backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            review_result = owner_backend.call_tool(
+                "governance_review_promotion_proposal",
+                {
+                    "proposal_id": proposal_id,
+                    "decision": "approve",
+                    "summary": "Promotion approved for canonical review",
+                },
+            )
+
+            self.assertTrue(review_result["isError"])
+            self.assertEqual(review_result["structuredContent"]["decision"], "allow")
+            self.assertTrue(review_result["structuredContent"]["requires_approval"])
+            self.assertIn("explicit approval evidence", review_result["content"][0]["text"])
+
+    def test_system_maintainer_cannot_review_promotion_proposal_with_mismatched_approval_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            maintainer_backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
+            proposal_result = maintainer_backend.call_tool(
+                "governance_create_promotion_proposal",
+                {
+                    "topic_id": "topic.python",
+                    "source_path": "20-KnowledgeHub/Python/index.md",
+                    "candidate_path": "20-KnowledgeHub/Python/index.md",
+                    "summary": "Promote Python index",
+                },
+            )
+            proposal_id = proposal_result["structuredContent"]["proposal"]["proposal_id"]
+
+            owner_backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            review_result = owner_backend.call_tool(
+                "governance_review_promotion_proposal",
+                {
+                    "proposal_id": proposal_id,
+                    "decision": "approve",
+                    "summary": "Promotion approved for canonical review",
+                    "approval": {
+                        "approved_by": "maintainer@example.com",
+                        "approved_at": "2026-05-13T12:00:00Z",
+                        "evidence": "Spoofed approval identity",
+                    },
+                },
+            )
+
+            self.assertTrue(review_result["isError"])
+            self.assertIn("must match the authenticated subject", review_result["content"][0]["text"])
 
     def test_system_maintainer_can_apply_approved_promotion_proposal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -639,6 +765,11 @@ class McpGovernanceServerTests(unittest.TestCase):
                     "proposal_id": proposal_id,
                     "decision": "approve",
                     "summary": "Promotion approved",
+                    "approval": {
+                        "approved_by": "owner@example.com",
+                        "approved_at": "2026-05-13T12:00:00Z",
+                        "evidence": "Manual approval recorded for canonical-impacting review",
+                    },
                 },
             )
             apply_result = owner_backend.call_tool(
@@ -967,21 +1098,161 @@ class McpGovernanceServerTests(unittest.TestCase):
             )
 
             backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
-            result = backend.call_tool("governance_apply_snapshot_upgrade", {"summary": "Apply latest system snapshot"})
+            result = backend.call_tool(
+                "governance_apply_snapshot_upgrade",
+                {
+                    "summary": "Apply latest system snapshot",
+                    "approval": self._snapshot_approval(
+                        vault,
+                        evidence="Manual approval recorded for L4 snapshot apply",
+                    ),
+                },
+            )
 
             self.assertFalse(result["isError"])
             self.assertEqual(result["structuredContent"]["status"], "compatible")
 
             compat = json.loads(compat_path.read_text(encoding="utf-8"))
             version = json.loads((vault / ".dbms-system" / "version.json").read_text(encoding="utf-8"))
-            expected_ref = version.get("release_tag") or version.get("source_commit")
+            expected_ref = version.get("snapshot_ref") or version.get("release_tag") or version.get("source_commit")
             self.assertEqual(compat["system_tag"], expected_ref)
             self.assertEqual(compat["status"], "compatible")
+            self.assertEqual(compat["approval_evidence"]["approved_by"], "owner@example.com")
 
             ledger_lines = [line for line in (vault / ".knowledge-registry" / "change-ledger.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
             last_entry = json.loads(ledger_lines[-1])
             self.assertEqual(last_entry["operation"], "system_snapshot_apply")
             self.assertTrue(last_entry["registry_updated"])
+            self.assertEqual(last_entry["approval_evidence"]["approved_by"], "owner@example.com")
+
+    def test_system_maintainer_cannot_apply_snapshot_upgrade_without_approval_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            result = backend.call_tool("governance_apply_snapshot_upgrade", {"summary": "Apply latest system snapshot"})
+
+            self.assertTrue(result["isError"])
+            self.assertEqual(result["structuredContent"]["decision"], "allow")
+            self.assertTrue(result["structuredContent"]["requires_approval"])
+            self.assertIn("approved proposal or explicit approval evidence", result["content"][0]["text"])
+
+    def test_system_maintainer_cannot_apply_snapshot_upgrade_with_mismatched_approval_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            result = backend.call_tool(
+                "governance_apply_snapshot_upgrade",
+                {
+                    "summary": "Apply latest system snapshot",
+                    "approval": self._snapshot_approval(
+                        vault,
+                        approved_by="maintainer@example.com",
+                        evidence="Spoofed approval identity",
+                    ),
+                },
+            )
+
+            self.assertTrue(result["isError"])
+            self.assertIn("must match the authenticated subject", result["content"][0]["text"])
+
+    def test_system_maintainer_cannot_apply_snapshot_upgrade_with_unrelated_approved_proposal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            maintainer_backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
+            proposal_result = maintainer_backend.call_tool(
+                "governance_create_promotion_proposal",
+                {
+                    "topic_id": "topic.python",
+                    "source_path": "20-KnowledgeHub/Python/index.md",
+                    "candidate_path": "20-KnowledgeHub/Python/index.md",
+                    "summary": "Promote Python index",
+                },
+            )
+            proposal_id = proposal_result["structuredContent"]["proposal"]["proposal_id"]
+
+            owner_backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            owner_backend.call_tool(
+                "governance_review_promotion_proposal",
+                {
+                    "proposal_id": proposal_id,
+                    "decision": "approve",
+                    "summary": "Promotion approved",
+                    "approval": {
+                        "approved_by": "owner@example.com",
+                        "approved_at": "2026-05-13T12:00:00Z",
+                        "evidence": "Manual approval recorded for canonical-impacting review",
+                    },
+                },
+            )
+
+            result = owner_backend.call_tool(
+                "governance_apply_snapshot_upgrade",
+                {
+                    "summary": "Attempt snapshot apply with wrong proposal type",
+                    "proposal_id": proposal_id,
+                },
+            )
+
+            self.assertTrue(result["isError"])
+            self.assertIn("snapshot_upgrade", result["content"][0]["text"])
+
+    def test_system_maintainer_cannot_apply_snapshot_upgrade_with_stale_snapshot_proposal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            maintainer_backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
+            request_result = maintainer_backend.call_tool(
+                "governance_request_snapshot_review",
+                {"summary": "Request snapshot review before upgrade"},
+            )
+            proposal_id = request_result["structuredContent"]["proposal"]["proposal_id"]
+
+            proposals_path = vault / ".knowledge-registry" / "governance-proposals.json"
+            proposals = json.loads(proposals_path.read_text(encoding="utf-8"))
+            for item in proposals["items"]:
+                if item["proposal_id"] == proposal_id:
+                    item["status"] = "approved"
+                    item["reviewed_by"] = "owner@example.com"
+                    item["reviewed_at"] = "2026-05-13T12:00:00Z"
+                    item["details"]["snapshotRef"] = "stale-snapshot-ref"
+                    break
+            proposals_path.write_text(json.dumps(proposals, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            owner_backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            result = owner_backend.call_tool(
+                "governance_apply_snapshot_upgrade",
+                {
+                    "summary": "Attempt stale snapshot apply",
+                    "proposal_id": proposal_id,
+                },
+            )
+
+            self.assertTrue(result["isError"])
+            self.assertIn("does not match the current snapshot review", result["content"][0]["text"])
+
+    def test_system_maintainer_cannot_apply_snapshot_upgrade_with_replayed_snapshot_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            result = backend.call_tool(
+                "governance_apply_snapshot_upgrade",
+                {
+                    "summary": "Attempt replayed snapshot approval",
+                    "approval": self._snapshot_approval(vault, snapshot_ref="stale-snapshot-ref"),
+                },
+            )
+
+            self.assertTrue(result["isError"])
+            self.assertIn("approval.snapshot_ref must match the current snapshot review", result["content"][0]["text"])
 
     def test_vault_maintainer_cannot_apply_snapshot_upgrade_directly(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1155,6 +1426,11 @@ class McpGovernanceServerTests(unittest.TestCase):
                                 "proposal_id": proposal_id,
                                 "decision": "approve",
                                 "summary": "Approve via stdio",
+                                "approval": {
+                                    "approved_by": "owner@example.com",
+                                    "approved_at": "2026-05-13T12:00:00Z",
+                                    "evidence": "Manual approval recorded for canonical-impacting review",
+                                },
                             },
                         },
                     },

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import hashlib
 from pathlib import Path
 import subprocess
 import argparse
@@ -33,44 +34,85 @@ def latest_tag() -> str | None:
         return None
 
 
-def repo_dirty() -> bool:
+def repo_dirty(pathspec: str | None = None) -> bool:
     try:
-        output = subprocess.check_output(
-            ["git", "-C", str(ROOT), "status", "--porcelain"],
-            text=True,
-        )
+        command = ["git", "-C", str(ROOT), "status", "--porcelain"]
+        if pathspec is not None:
+            command.extend(["--", pathspec])
+        output = subprocess.check_output(command, text=True)
         return bool(output.strip())
     except Exception:
         return False
 
 
-def sync_snapshot(target_vault: Path) -> Path:
-    snapshot = target_vault / ".dbms-system"
-    snapshot.mkdir(parents=True, exist_ok=True)
+def tree_digest(root: Path, *, exclude: set[str] | None = None) -> str:
+    hasher = hashlib.sha256()
+    excluded = exclude or set()
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root).as_posix()
+        if rel in excluded:
+            continue
+        hasher.update(rel.encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update(path.read_bytes())
+        hasher.update(b"\0")
+    return hasher.hexdigest()
 
-    # Clear known snapshot subtrees before replacing.
-    for rel in ["Interfaces", "Planning", "DBMS", "RULES.md", "00-Agent-Onboarding.md", "skills-manifest.md"]:
-        path = snapshot / rel
-        if path.is_dir():
-            shutil.rmtree(path)
-        elif path.exists():
-            path.unlink()
 
-    shutil.copy2(CORE / "RULES.md", snapshot / "RULES.md")
-    shutil.copy2(CORE / "00-Agent-Onboarding.md", snapshot / "00-Agent-Onboarding.md")
-    shutil.copy2(CORE / "skills-manifest.md", snapshot / "skills-manifest.md")
-    shutil.copytree(CORE / "Interfaces", snapshot / "Interfaces", dirs_exist_ok=True)
-    shutil.copytree(CORE / "Planning", snapshot / "Planning", dirs_exist_ok=True)
-    shutil.copytree(CORE / "DBMS", snapshot / "DBMS", dirs_exist_ok=True)
+def snapshot_content_digest() -> str:
+    return tree_digest(CORE)
 
-    version = {
+
+def current_snapshot_version() -> dict:
+    release_tag = latest_tag()
+    source_commit = repo_head()
+    source_dirty = repo_dirty("core")
+    content_digest = snapshot_content_digest()
+    base_ref = release_tag or source_commit or "unversioned"
+    snapshot_ref = f"{base_ref}:{content_digest[:12]}"
+    return {
         "system_repo": "obsidian-vault-governance-kit",
-        "release_tag": latest_tag(),
-        "source_commit": repo_head(),
-        "source_dirty": repo_dirty(),
-        "synced_at": datetime.now(timezone.utc).isoformat(),
+        "release_tag": release_tag,
+        "source_commit": source_commit,
+        "source_dirty": source_dirty,
+        "content_digest": content_digest,
+        "snapshot_ref": snapshot_ref,
     }
-    (snapshot / "version.json").write_text(json.dumps(version, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def sync_snapshot(target_vault: Path, *, expected_version: dict | None = None) -> Path:
+    snapshot = target_vault / ".dbms-system"
+    staging = target_vault / ".dbms-system.__staging__"
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True, exist_ok=True)
+
+    source_version = dict(expected_version or current_snapshot_version())
+    version = {**source_version, "synced_at": datetime.now(timezone.utc).isoformat()}
+
+    try:
+        shutil.copy2(CORE / "RULES.md", staging / "RULES.md")
+        shutil.copy2(CORE / "00-Agent-Onboarding.md", staging / "00-Agent-Onboarding.md")
+        shutil.copy2(CORE / "skills-manifest.md", staging / "skills-manifest.md")
+        shutil.copytree(CORE / "Interfaces", staging / "Interfaces", dirs_exist_ok=True)
+        shutil.copytree(CORE / "Planning", staging / "Planning", dirs_exist_ok=True)
+        shutil.copytree(CORE / "DBMS", staging / "DBMS", dirs_exist_ok=True)
+
+        staged_digest = tree_digest(staging)
+        if staged_digest != version["content_digest"]:
+            raise RuntimeError("snapshot source changed during sync")
+
+        (staging / "version.json").write_text(json.dumps(version, ensure_ascii=False, indent=2), encoding="utf-8")
+        if snapshot.exists():
+            shutil.rmtree(snapshot)
+        staging.replace(snapshot)
+    except Exception:
+        if staging.exists():
+            shutil.rmtree(staging)
+        raise
+
     return snapshot
 
 

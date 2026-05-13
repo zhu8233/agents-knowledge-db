@@ -281,13 +281,13 @@ The current implementation supports:
 - MCP `tools`
 - server-first adoption for MCP-capable agents
 - launcher-based stdio startup through `scripts/run_mcp_server.py`
-- identity introspection through `whoami`
+- identity introspection through `governance_whoami`
 - role-filtered tool visibility driven by `LocalOverrides/mcp-access-policy.json`
-- controlled registry writes through `apply_registry_update` for authorized system maintainers
-- promotion queue creation through `create_promotion_proposal` for authorized maintainers
-- promotion queue review/apply through `list_promotion_queue`, `review_promotion_proposal`, and `apply_promotion_proposal`
-- snapshot review requests through `request_snapshot_review`
-- controlled snapshot review/apply flow through `review_snapshot_upgrade` and `apply_snapshot_upgrade`
+- controlled registry writes through `governance_apply_registry_update` for authorized system maintainers
+- promotion queue creation through `governance_create_promotion_proposal` for authorized maintainers
+- promotion queue review/apply through `governance_list_promotion_queue`, `governance_review_promotion_proposal`, and `governance_apply_promotion_proposal`
+- snapshot review requests through `governance_request_snapshot_review`
+- controlled snapshot review/apply flow through `governance_review_snapshot_upgrade` and `governance_apply_snapshot_upgrade`
 
 The current MCP resources include:
 
@@ -306,8 +306,8 @@ The current MCP prompts include:
 - `onboard_agent_to_vault`
 - `review_topic_health`
 - `prepare_registry_repair`
-- `review_snapshot_upgrade`
-- `review_promotion_proposal`
+- `governance_review_snapshot_upgrade`
+- `governance_review_promotion_proposal`
 
 See also:
 

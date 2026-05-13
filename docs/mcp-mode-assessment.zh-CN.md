@@ -270,15 +270,15 @@
 
 ### 6.2.2 推荐 `tools`
 
-- `get_topic_context`
-- `list_topic_findings`
-- `validate_data_repo`
+- `governance_get_topic_context`
+- `governance_list_topic_findings`
+- `governance_validate_data_repo`
 - `rebuild_dbms_index`
-- `propose_registry_update`
-- `apply_registry_update`
-- `create_promotion_proposal`
-- `review_snapshot_upgrade`
-- `apply_snapshot_upgrade`
+- `governance_propose_registry_update`
+- `governance_apply_registry_update`
+- `governance_create_promotion_proposal`
+- `governance_review_snapshot_upgrade`
+- `governance_apply_snapshot_upgrade`
 - `generate_governance_report`
 
 ### 6.2.3 推荐 `prompts`
@@ -380,9 +380,9 @@ MCP 服务是治理增强层，不是唯一生存层。仓库仍应能在没有 
 
 范围：
 
-- `validate_data_repo`
-- `list_topic_findings`
-- `propose_registry_update`
+- `governance_validate_data_repo`
+- `governance_list_topic_findings`
+- `governance_propose_registry_update`
 - 只允许局部、可审计、可回滚的注册表修改建议
 
 适用角色：
@@ -422,10 +422,10 @@ MCP 服务是治理增强层，不是唯一生存层。仓库仍应能在没有 
 
 范围：
 
-- `apply_registry_update`
-- `review_snapshot_upgrade`
-- `apply_snapshot_upgrade`
-- `create_promotion_proposal`
+- `governance_apply_registry_update`
+- `governance_review_snapshot_upgrade`
+- `governance_apply_snapshot_upgrade`
+- `governance_create_promotion_proposal`
 
 适用角色：
 
@@ -471,9 +471,9 @@ MVP 建议只包含：
 
 - 规则与 schema `resources`
 - 注册表与索引 `resources`
-- `get_topic_context`
-- `list_topic_findings`
-- `validate_data_repo`
+- `governance_get_topic_context`
+- `governance_list_topic_findings`
+- `governance_validate_data_repo`
 - `generate_governance_report`
 
 这样可以先验证三件事：

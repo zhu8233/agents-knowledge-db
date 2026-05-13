@@ -2,5 +2,8 @@
   "system_repo": null,
   "release_tag": null,
   "source_commit": null,
+  "source_dirty": null,
+  "content_digest": null,
+  "snapshot_ref": null,
   "synced_at": null
 }

@@ -52,27 +52,27 @@ The server then evaluates access by combining:
 - `onboard_agent_to_vault`
 - `review_topic_health`
 - `prepare_registry_repair`
-- `review_snapshot_upgrade`
-- `review_promotion_proposal`
+- `governance_review_snapshot_upgrade`
+- `governance_review_promotion_proposal`
 
 ## Current Tools
 
-- `search_topics`
-- `get_topic_context`
-- `list_topic_findings`
-- `validate_data_repo`
-- `propose_registry_update`
-- `create_promotion_proposal`
-- `list_promotion_queue`
-- `review_promotion_proposal`
-- `apply_promotion_proposal`
-- `apply_registry_update`
-- `evaluate_access`
-- `request_snapshot_review`
-- `review_snapshot_upgrade`
-- `apply_snapshot_upgrade`
+- `governance_search_topics`
+- `governance_get_topic_context`
+- `governance_list_topic_findings`
+- `governance_validate_data_repo`
+- `governance_propose_registry_update`
+- `governance_create_promotion_proposal`
+- `governance_list_promotion_queue`
+- `governance_review_promotion_proposal`
+- `governance_apply_promotion_proposal`
+- `governance_apply_registry_update`
+- `governance_evaluate_access`
+- `governance_request_snapshot_review`
+- `governance_review_snapshot_upgrade`
+- `governance_apply_snapshot_upgrade`
 
-Tool visibility is role-filtered at runtime.
+Tool visibility is role-filtered at runtime, and `L3-L4` executions require an approved proposal or explicit approval evidence even when the tool is visible. Snapshot apply additionally binds approval to the current `snapshotRef` / `compatibilityRef`.
 
 ## Design Boundary
 
