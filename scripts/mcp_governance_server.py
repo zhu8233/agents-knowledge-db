@@ -10,15 +10,27 @@ from mcp_governance_backend import GovernanceBackend, SERVER_INFO, SUPPORTED_PRO
 
 
 def read_message() -> dict | None:
-    line = sys.stdin.buffer.readline()
-    if not line:
-        return None
-    return json.loads(line.decode("utf-8"))
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        if line == b"\n":
+            continue
+        try:
+            text = line.decode("utf-8")
+        except UnicodeDecodeError:
+            write_message(error_response(None, -32700, "Parse error: invalid UTF-8"))
+            continue
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            write_message(error_response(None, -32700, "Parse error: invalid JSON"))
+            continue
 
 
 def write_message(message: dict) -> None:
-    sys.stdout.write(json.dumps(message, ensure_ascii=False) + "\n")
-    sys.stdout.flush()
+    sys.stdout.buffer.write((json.dumps(message, ensure_ascii=False) + "\n").encode("utf-8"))
+    sys.stdout.buffer.flush()
 
 
 def success_response(request_id, result: dict) -> dict:
