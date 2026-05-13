@@ -103,7 +103,12 @@ class GovernanceBackend:
                 "description": "Search the vault registry by topic title or alias.",
                 "risk_level": "L0",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": True},
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {
                     "type": "object",
                     "required": ["query"],
@@ -114,6 +119,29 @@ class GovernanceBackend:
                     },
                     "additionalProperties": False,
                 },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "total": {"type": "integer"},
+                        "count": {"type": "integer"},
+                        "offset": {"type": "integer"},
+                        "has_more": {"type": "boolean"},
+                        "next_offset": {"type": ["integer", "null"]},
+                        "matches": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "topic_id": {"type": "string"},
+                                    "title": {"type": "string"},
+                                    "status": {"type": "string"},
+                                    "canonical_home": {"type": ["string", "null"]},
+                                },
+                            },
+                        },
+                    },
+                },
             },
             {
                 "name": "governance_get_topic_context",
@@ -121,12 +149,29 @@ class GovernanceBackend:
                 "description": "Return registry, object, and finding context for a topic.",
                 "risk_level": "L0",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": True},
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {
                     "type": "object",
                     "required": ["topic_id"],
                     "properties": {"topic_id": {"type": "string"}},
                     "additionalProperties": False,
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "topic": {"type": "object"},
+                        "objects": {"type": "array", "items": {"type": "object"}},
+                        "findings": {"type": "array", "items": {"type": "object"}},
+                        "objectCount": {"type": "integer"},
+                        "findingCount": {"type": "integer"},
+                        "source_of_truth": {"type": "string"},
+                        "derived_state_used": {"type": "string"},
+                    },
                 },
             },
             {
@@ -135,7 +180,12 @@ class GovernanceBackend:
                 "description": "List DBMS findings for a topic or the whole vault.",
                 "risk_level": "L0",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": True},
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -145,6 +195,18 @@ class GovernanceBackend:
                     },
                     "additionalProperties": False,
                 },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "topic_id": {"type": ["string", "null"]},
+                        "total": {"type": "integer"},
+                        "count": {"type": "integer"},
+                        "offset": {"type": "integer"},
+                        "has_more": {"type": "boolean"},
+                        "next_offset": {"type": ["integer", "null"]},
+                        "items": {"type": "array", "items": {"type": "object"}},
+                    },
+                },
             },
             {
                 "name": "governance_validate_data_repo",
@@ -152,8 +214,21 @@ class GovernanceBackend:
                 "description": "Run the governed data repository validator against the current vault.",
                 "risk_level": "L1",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": True},
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "exitCode": {"type": "integer"},
+                        "stdout": {"type": "string"},
+                        "stderr": {"type": "string"},
+                    },
+                },
             },
             {
                 "name": "governance_whoami",
@@ -161,8 +236,24 @@ class GovernanceBackend:
                 "description": "Return the current subject identity, effective role, and visible governance tools.",
                 "risk_level": "L0",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": True},
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "subjectId": {"type": "string"},
+                        "authMode": {"type": "string"},
+                        "mappedAgentId": {"type": ["string", "null"]},
+                        "effectiveRole": {"type": "string"},
+                        "visibleTools": {"type": "array", "items": {"type": "string"}},
+                        "toolCount": {"type": "integer"},
+                    },
+                },
             },
             {
                 "name": "governance_propose_registry_update",
@@ -170,7 +261,12 @@ class GovernanceBackend:
                 "description": "Create and persist a structured registry update proposal without mutating the registry.",
                 "risk_level": "L1",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": False},
+                "annotations": {
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {
                     "type": "object",
                     "required": ["target_kind", "operation", "summary"],
@@ -183,6 +279,12 @@ class GovernanceBackend:
                     },
                     "additionalProperties": False,
                 },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "proposal": {"type": "object"},
+                    },
+                },
             },
             {
                 "name": "governance_create_promotion_proposal",
@@ -190,7 +292,12 @@ class GovernanceBackend:
                 "description": "Append a proposal to the promotion queue and record it in the ledger.",
                 "risk_level": "L1",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": False},
+                "annotations": {
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {
                     "type": "object",
                     "required": ["topic_id", "source_path", "candidate_path", "summary"],
@@ -202,6 +309,12 @@ class GovernanceBackend:
                     },
                     "additionalProperties": False,
                 },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "proposal": {"type": "object"},
+                    },
+                },
             },
             {
                 "name": "governance_list_promotion_queue",
@@ -209,7 +322,12 @@ class GovernanceBackend:
                 "description": "Read the current promotion queue.",
                 "risk_level": "L0",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": True},
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -218,6 +336,18 @@ class GovernanceBackend:
                     },
                     "additionalProperties": False,
                 },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "items": {"type": "array", "items": {"type": "object"}},
+                        "total": {"type": "integer"},
+                        "count": {"type": "integer"},
+                        "offset": {"type": "integer"},
+                        "has_more": {"type": "boolean"},
+                        "next_offset": {"type": ["integer", "null"]},
+                        "lastUpdated": {"type": ["string", "null"]},
+                    },
+                },
             },
             {
                 "name": "governance_apply_registry_update",
@@ -225,7 +355,12 @@ class GovernanceBackend:
                 "description": "Apply a registry upsert and append a change-ledger entry.",
                 "risk_level": "L2",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": False},
+                "annotations": {
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {
                     "type": "object",
                     "required": ["target_kind", "operation", "summary", "entry"],
@@ -238,6 +373,19 @@ class GovernanceBackend:
                     },
                     "additionalProperties": False,
                 },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "targetKind": {"type": "string"},
+                        "operation": {"type": "string"},
+                        "created": {"type": "boolean"},
+                        "updated": {"type": "boolean"},
+                        "ledgerEntry": {"type": "object"},
+                        "updatedTopic": {"type": "object"},
+                        "updatedObject": {"type": "object"},
+                        "updatedAdapter": {"type": "object"},
+                    },
+                },
             },
             {
                 "name": "governance_review_promotion_proposal",
@@ -245,7 +393,12 @@ class GovernanceBackend:
                 "description": "Approve or reject a queued promotion proposal.",
                 "risk_level": "L3",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": False},
+                "annotations": {
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {
                     "type": "object",
                     "required": ["proposal_id", "decision", "summary"],
@@ -256,6 +409,12 @@ class GovernanceBackend:
                     },
                     "additionalProperties": False,
                 },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "proposal": {"type": "object"},
+                    },
+                },
             },
             {
                 "name": "governance_apply_promotion_proposal",
@@ -263,7 +422,12 @@ class GovernanceBackend:
                 "description": "Apply an approved promotion proposal to registry canonical placement.",
                 "risk_level": "L3",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": False},
+                "annotations": {
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {
                     "type": "object",
                     "required": ["proposal_id", "summary"],
@@ -273,6 +437,13 @@ class GovernanceBackend:
                     },
                     "additionalProperties": False,
                 },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "proposal": {"type": "object"},
+                        "updatedTopic": {"type": "object"},
+                    },
+                },
             },
             {
                 "name": "governance_evaluate_access",
@@ -280,7 +451,12 @@ class GovernanceBackend:
                 "description": "Evaluate the current subject against a requested governance action.",
                 "risk_level": "L0",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": True},
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {
                     "type": "object",
                     "required": ["tool", "risk_level", "target_layer"],
@@ -291,6 +467,17 @@ class GovernanceBackend:
                     },
                     "additionalProperties": False,
                 },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "decision": {"type": "string"},
+                        "tool": {"type": "string"},
+                        "risk_level": {"type": "string"},
+                        "target_layer": {"type": "string"},
+                        "effective_role": {"type": ["string", "null"]},
+                        "mapped_agent_id": {"type": ["string", "null"]},
+                    },
+                },
             },
             {
                 "name": "governance_request_snapshot_review",
@@ -298,12 +485,23 @@ class GovernanceBackend:
                 "description": "Create and persist a proposal for snapshot upgrade review.",
                 "risk_level": "L1",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": False},
+                "annotations": {
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {
                     "type": "object",
                     "required": ["summary"],
                     "properties": {"summary": {"type": "string"}},
                     "additionalProperties": False,
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "proposal": {"type": "object"},
+                    },
                 },
             },
             {
@@ -312,8 +510,23 @@ class GovernanceBackend:
                 "description": "Compare the active snapshot with local compatibility state.",
                 "risk_level": "L1",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": True},
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "status": {"type": "string"},
+                        "upgradeAvailable": {"type": "boolean"},
+                        "currentTag": {"type": ["string", "null"]},
+                        "latestTag": {"type": ["string", "null"]},
+                        "compatibility": {"type": ["string", "null"]},
+                    },
+                },
             },
             {
                 "name": "governance_apply_snapshot_upgrade",
@@ -321,7 +534,12 @@ class GovernanceBackend:
                 "description": "Sync the latest system snapshot into the vault and update compatibility state.",
                 "risk_level": "L4",
                 "target_layer": "system",
-                "annotations": {"readOnlyHint": False},
+                "annotations": {
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": False,
+                },
                 "inputSchema": {
                     "type": "object",
                     "required": ["summary"],
@@ -330,6 +548,15 @@ class GovernanceBackend:
                         "proposal_id": {"type": "string"}
                     },
                     "additionalProperties": False,
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "status": {"type": "string"},
+                        "system_tag": {"type": "string"},
+                        "override_checked_at": {"type": "string"},
+                        "notes": {"type": ["string", "null"]},
+                    },
                 },
             },
         ]
