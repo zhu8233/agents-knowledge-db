@@ -141,6 +141,29 @@ See also:
 - `docs/mcp-role-examples.md`
 - `docs/mcp-vs-skills-adoption.md`
 
+## Latest Release
+
+### v1.3.0
+
+`v1.3.0` upgrades Agents Knowledge DB from a documentation-first governance kit into a usable governance MCP surface.
+
+It now includes:
+
+- a stdio governance MCP server
+- role-aware access control through `agent-roster.json` and `LocalOverrides/mcp-access-policy.json`
+- unified proposal storage through `.knowledge-registry/governance-proposals.json`
+- controlled governance workflows for:
+  - registry proposal / apply
+  - snapshot review / request / apply
+  - promotion proposal / queue / review / apply
+- server-first adoption guidance for MCP-capable agents, with adapters and skills kept as compatibility fallbacks
+
+Recommended MCP launch:
+
+```bash
+python scripts/run_mcp_server.py /path/to/your-vault --subject-id owner@example.com --auth-mode oauth
+```
+
 ## Included Components
 
 ### Skill pack
