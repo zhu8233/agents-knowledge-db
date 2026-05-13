@@ -15,8 +15,7 @@ from mcp_governance_backend import GovernanceBackend  # type: ignore  # noqa: E4
 
 
 def _framed_message_bytes(message: dict) -> bytes:
-    payload = json.dumps(message).encode("utf-8")
-    return f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii") + payload
+    return json.dumps(message).encode("utf-8") + b"\n"
 
 
 def _write_framed_message(stream, message: dict) -> None:
@@ -26,22 +25,9 @@ def _write_framed_message(stream, message: dict) -> None:
 
 def _read_framed_messages(data: bytes) -> list[dict]:
     messages: list[dict] = []
-    cursor = 0
-    while cursor < len(data):
-        header_end = data.find(b"\r\n\r\n", cursor)
-        if header_end == -1:
-            break
-        header_blob = data[cursor:header_end].decode("ascii")
-        headers = {}
-        for line in header_blob.split("\r\n"):
-            key, value = line.split(":", 1)
-            headers[key.strip().lower()] = value.strip()
-        length = int(headers["content-length"])
-        body_start = header_end + 4
-        body_end = body_start + length
-        body = data[body_start:body_end]
-        messages.append(json.loads(body.decode("utf-8")))
-        cursor = body_end
+    for line in data.splitlines():
+        if line.strip():
+            messages.append(json.loads(line.decode("utf-8")))
     return messages
 
 

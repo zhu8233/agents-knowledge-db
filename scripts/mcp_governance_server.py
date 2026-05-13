@@ -10,27 +10,15 @@ from mcp_governance_backend import GovernanceBackend, SERVER_INFO, SUPPORTED_PRO
 
 
 def read_message() -> dict | None:
-    headers: dict[str, str] = {}
-    while True:
-        line = sys.stdin.buffer.readline()
-        if not line:
-            return None
-        if line == b"\r\n":
-            break
-        key, value = line.decode("ascii").split(":", 1)
-        headers[key.strip().lower()] = value.strip()
-    length = int(headers["content-length"])
-    body = sys.stdin.buffer.read(length)
-    if not body:
+    line = sys.stdin.buffer.readline()
+    if not line:
         return None
-    return json.loads(body.decode("utf-8"))
+    return json.loads(line.decode("utf-8"))
 
 
 def write_message(message: dict) -> None:
-    payload = json.dumps(message, ensure_ascii=False).encode("utf-8")
-    sys.stdout.buffer.write(f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii"))
-    sys.stdout.buffer.write(payload)
-    sys.stdout.buffer.flush()
+    sys.stdout.write(json.dumps(message, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
 
 
 def success_response(request_id, result: dict) -> dict:
