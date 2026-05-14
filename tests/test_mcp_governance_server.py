@@ -115,6 +115,13 @@ class McpGovernanceServerTests(unittest.TestCase):
         canonical_path.parent.mkdir(parents=True, exist_ok=True)
         canonical_path.write_text("# Python\n", encoding="utf-8")
 
+        health_path = vault / "ProjectRaw" / "Health"
+        health_path.mkdir(parents=True, exist_ok=True)
+        (health_path / "diet.md").write_text(
+            "# Diet\n\n## 2026-05-14\ncalories: 1900\n",
+            encoding="utf-8",
+        )
+
         findings_path = vault / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index" / "findings.json"
         findings = {
             "items": [
@@ -155,6 +162,8 @@ class McpGovernanceServerTests(unittest.TestCase):
             self.assertIn("governance_search_topics", tool_names)
             self.assertIn("governance_get_topic_context", tool_names)
             self.assertNotIn("governance_validate_data_repo", tool_names)
+            self.assertNotIn("governance_rebuild_dbms_index", tool_names)
+            self.assertNotIn("governance_reconcile_dbms_state", tool_names)
             self.assertNotIn("governance_propose_registry_update", tool_names)
 
     def test_whoami_returns_effective_role_and_visible_tools(self) -> None:
@@ -194,6 +203,36 @@ class McpGovernanceServerTests(unittest.TestCase):
             self.assertIn("governance_review_promotion_proposal", tool_names)
             self.assertIn("governance_apply_promotion_proposal", tool_names)
             self.assertIn("governance_evaluate_access", tool_names)
+            self.assertIn("governance_rebuild_dbms_index", tool_names)
+            self.assertIn("governance_reconcile_dbms_state", tool_names)
+
+    def test_system_maintainer_tool_list_includes_vault_content_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            tool_names = [tool["name"] for tool in backend.list_tools()]
+
+            self.assertIn("vault_list_paths", tool_names)
+            self.assertIn("vault_read_markdown", tool_names)
+            self.assertIn("vault_search_markdown", tool_names)
+            self.assertIn("vault_check_artifacts", tool_names)
+            self.assertIn("vault_scan_curation_gaps", tool_names)
+
+    def test_vault_user_tool_list_includes_read_only_vault_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
+            tool_names = [tool["name"] for tool in backend.list_tools()]
+
+            self.assertIn("vault_list_paths", tool_names)
+            self.assertIn("vault_read_markdown", tool_names)
+            self.assertIn("vault_search_markdown", tool_names)
+            self.assertIn("vault_check_artifacts", tool_names)
+            self.assertNotIn("vault_scan_curation_gaps", tool_names)
 
     def test_search_topics_matches_title_and_alias(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -226,12 +265,117 @@ class McpGovernanceServerTests(unittest.TestCase):
             self.assertEqual(result["structuredContent"]["objectCount"], 1)
             self.assertEqual(result["structuredContent"]["findingCount"], 1)
 
-    def test_prompts_and_resources_are_available(self) -> None:
+    def test_vault_read_markdown_tool_returns_structured_content(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             vault = Path(tmp) / "vault"
             self._install_and_seed_vault(vault)
 
             backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
+            result = backend.call_tool(
+                "vault_read_markdown",
+                {"path": "ProjectRaw/Health/diet.md", "date_filter": "2026-05-14"},
+            )
+
+            self.assertFalse(result["isError"])
+            self.assertEqual(result["structuredContent"]["path"], "ProjectRaw/Health/diet.md")
+            self.assertIn("1900", result["structuredContent"]["content"])
+
+    def test_vault_list_paths_tool_applies_backend_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
+            result = backend.call_tool("vault_list_paths", {"root": "ProjectRaw/Health"})
+
+            self.assertFalse(result["isError"])
+            self.assertEqual(result["structuredContent"]["root"], "ProjectRaw/Health")
+            self.assertIn("ProjectRaw/Health/diet.md", result["structuredContent"]["paths"])
+
+    def test_vault_scan_curation_gaps_tool_returns_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+            registry_path = vault / ".knowledge-registry" / "vault-registry.json"
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            registry["topics"].append(
+                {
+                    "topic_id": "topic.deep_scan",
+                    "title": "Deep Scan",
+                    "aliases": [],
+                    "status": "active",
+                    "source_domains": ["research"],
+                    "intake_paths": ["ProjectRaw/DeepScan"],
+                    "curation_paths": ["20-KnowledgeHub/DeepScan"],
+                    "canonical_home": "20-KnowledgeHub/DeepScan/index.md",
+                    "related_topics": [],
+                    "upstream_bindings": [],
+                }
+            )
+            registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
+            topic_dir = vault / "ProjectRaw" / "DeepScan"
+            topic_dir.mkdir(parents=True, exist_ok=True)
+            for index in range(2):
+                (topic_dir / f"0{index + 1}-source.md").write_text("source\n", encoding="utf-8")
+
+            backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
+            result = backend.call_tool("vault_scan_curation_gaps", {"min_intake_files": 2})
+
+            self.assertFalse(result["isError"])
+            self.assertEqual(result["structuredContent"]["count"], 1)
+            self.assertEqual(result["structuredContent"]["items"][0]["topic_path"], "ProjectRaw/DeepScan")
+
+    def test_system_maintainer_can_upsert_markdown_via_backend(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            result = backend.call_tool(
+                "vault_upsert_markdown",
+                {"path": "ProjectRaw/DailyReports/2026-05-14.md", "content": "# Daily\n", "mode": "upsert"},
+            )
+
+            self.assertFalse(result["isError"])
+            self.assertEqual(result["structuredContent"]["operation"], "upsert")
+            self.assertEqual(result["structuredContent"]["path"], "ProjectRaw/DailyReports/2026-05-14.md")
+
+    def test_vault_maintainer_cannot_call_vault_upsert_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="maintainer@example.com", auth_mode="oauth")
+            result = backend.call_tool(
+                "vault_upsert_markdown",
+                {"path": "ProjectRaw/DailyReports/2026-05-14.md", "content": "# Daily\n", "mode": "upsert"},
+            )
+
+            self.assertTrue(result["isError"])
+
+    def test_system_maintainer_can_append_markdown_via_backend(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+            report = vault / "ProjectRaw" / "DailyReports" / "2026-05-14.md"
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text("# Daily\n", encoding="utf-8")
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            result = backend.call_tool(
+                "vault_append_markdown",
+                {"path": "ProjectRaw/DailyReports/2026-05-14.md", "content": "- extra\n", "target": "eof"},
+            )
+
+            self.assertFalse(result["isError"])
+            self.assertEqual(result["structuredContent"]["operation"], "append")
+
+    def test_prompts_and_resources_are_available(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
             prompts = backend.list_prompts()
             resources = backend.list_resources()
             prompt = backend.get_prompt("onboard_agent_to_vault", {})
@@ -247,6 +391,8 @@ class McpGovernanceServerTests(unittest.TestCase):
             self.assertIn("governance://local/compatibility-status", [item["uri"] for item in resources])
             self.assertIn("governance://snapshot/version", [item["uri"] for item in resources])
             self.assertIn("governance://registry/change-ledger", [item["uri"] for item in resources])
+            self.assertIn("governance://dbms/index/file-index", [item["uri"] for item in resources])
+            self.assertIn("governance://dbms/index/topic-summary", [item["uri"] for item in resources])
             self.assertEqual(prompt["messages"][0]["role"], "user")
             self.assertIn("read `RULES.md`", prompt["messages"][0]["content"]["text"])
             self.assertIn("This is the single rule source for the governed vault.", rules["contents"][0]["text"])
@@ -257,6 +403,193 @@ class McpGovernanceServerTests(unittest.TestCase):
             self.assertIn('"items"', queue_resource["contents"][0]["text"])
             self.assertIn('"status"', compat_resource["contents"][0]["text"])
             self.assertIn('"bootstrap"', ledger_resource["contents"][0]["text"])
+
+    def test_vault_user_resource_list_hides_sensitive_governance_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
+            resource_uris = [item["uri"] for item in backend.list_resources()]
+
+            self.assertIn("governance://rules/root", resource_uris)
+            self.assertIn("governance://registry/vault", resource_uris)
+            self.assertIn("governance://dbms/index/findings", resource_uris)
+            self.assertIn("governance://dbms/index/file-index", resource_uris)
+            self.assertNotIn("governance://registry/agent-roster", resource_uris)
+            self.assertNotIn("governance://registry/governance-proposals", resource_uris)
+            self.assertNotIn("governance://registry/change-ledger", resource_uris)
+            self.assertNotIn("governance://local/compatibility-status", resource_uris)
+
+    def test_vault_user_cannot_read_hidden_resource(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="reader@example.com", auth_mode="oauth")
+            with self.assertRaises(ValueError):
+                backend.read_resource("governance://registry/change-ledger")
+
+    def test_read_resource_rejects_symlinked_file_backing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            vault = base / "vault"
+            self._install_and_seed_vault(vault)
+            outside = base / "outside-compatibility-status.json"
+            outside.write_text('{"status":"outside"}\n', encoding="utf-8")
+            compat_path = vault / "LocalOverrides" / "compatibility-status.json"
+            compat_path.unlink()
+            try:
+                compat_path.symlink_to(outside)
+            except OSError:
+                self.skipTest("Cannot create a symlink on this system")
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            with self.assertRaises(ValueError):
+                backend.read_resource("governance://local/compatibility-status")
+
+    def test_system_maintainer_can_rebuild_dbms_index_and_read_dbms_resources(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            orphan_dir = vault / "ProjectRaw" / "Loose"
+            orphan_dir.mkdir(parents=True, exist_ok=True)
+            (orphan_dir / "orphan.md").write_text("# Orphan\n", encoding="utf-8")
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            result = backend.call_tool("governance_rebuild_dbms_index", {})
+
+            self.assertFalse(result["isError"])
+            self.assertEqual(result["structuredContent"]["exitCode"], 0)
+            self.assertIn("DBMS_INDEX_REBUILT", result["structuredContent"]["stdout"])
+            self.assertEqual(result["structuredContent"]["state"]["last_task_type"], "index_rebuild")
+            self.assertTrue(result["structuredContent"]["reportPath"].endswith("-index-audit-report.md"))
+            self.assertTrue((vault / result["structuredContent"]["reportPath"]).exists())
+
+            file_index_resource = backend.read_resource("governance://dbms/index/file-index")
+            topic_summary_resource = backend.read_resource("governance://dbms/index/topic-summary")
+            index_state_resource = backend.read_resource("governance://dbms/state/last-index-run")
+            latest_report_resource = backend.read_resource("governance://dbms/reports/latest-index-audit")
+
+            self.assertIn('"path": "20-KnowledgeHub/Python/index.md"', file_index_resource["contents"][0]["text"])
+            self.assertIn('"topics"', topic_summary_resource["contents"][0]["text"])
+            self.assertIn('"last_task_type": "index_rebuild"', index_state_resource["contents"][0]["text"])
+            self.assertIn("# DBMS Index Audit Report", latest_report_resource["contents"][0]["text"])
+
+            ledger_lines = [line for line in (vault / ".knowledge-registry" / "change-ledger.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+            self.assertEqual(json.loads(ledger_lines[-1])["operation"], "index_rebuild")
+
+    def test_latest_dbms_report_resource_does_not_follow_paths_outside_vault(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            outside_report = Path(tmp) / "outside-report.md"
+            outside_report.write_text("SENSITIVE_OUTSIDE_REPORT\n", encoding="utf-8")
+
+            index_state_path = vault / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "last-index-run.json"
+            index_state = json.loads(index_state_path.read_text(encoding="utf-8"))
+            index_state["last_report_path"] = str(outside_report)
+            index_state_path.write_text(json.dumps(index_state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            report_resource = backend.read_resource("governance://dbms/reports/latest-index-audit")
+
+            self.assertNotIn("SENSITIVE_OUTSIDE_REPORT", report_resource["contents"][0]["text"])
+
+    def test_latest_dbms_report_resource_ignores_non_audit_report_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            reports_dir = vault / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "reports"
+            audit_report = reports_dir / "2026-04-20-index-audit-report.md"
+            audit_report.write_text("# DBMS Index Audit Report\n\nVALID_AUDIT\n", encoding="utf-8")
+
+            index_state_path = vault / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "last-index-run.json"
+            index_state = json.loads(index_state_path.read_text(encoding="utf-8"))
+            index_state["last_report_path"] = "01-Workflow/Knowledge-Governance/DBMS/reports/README.md"
+            index_state_path.write_text(json.dumps(index_state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            report_resource = backend.read_resource("governance://dbms/reports/latest-index-audit")
+
+            self.assertIn("VALID_AUDIT", report_resource["contents"][0]["text"])
+
+    def test_latest_dbms_report_resource_ignores_symlinked_audit_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            reports_dir = vault / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "reports"
+            outside_report = Path(tmp) / "outside-index-audit-report.md"
+            outside_report.write_text("SENSITIVE_SYMLINK_TARGET\n", encoding="utf-8")
+            symlink_report = reports_dir / "9999-12-31-index-audit-report.md"
+            try:
+                symlink_report.symlink_to(outside_report)
+            except (OSError, NotImplementedError, PermissionError):
+                self.skipTest("symlinks are not available in this environment")
+
+            audit_report = reports_dir / "2026-04-20-index-audit-report.md"
+            audit_report.write_text("# DBMS Index Audit Report\n\nVALID_AUDIT\n", encoding="utf-8")
+
+            index_state_path = vault / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "last-index-run.json"
+            index_state = json.loads(index_state_path.read_text(encoding="utf-8"))
+            index_state["last_report_path"] = None
+            index_state_path.write_text(json.dumps(index_state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            report_resource = backend.read_resource("governance://dbms/reports/latest-index-audit")
+
+            self.assertIn("VALID_AUDIT", report_resource["contents"][0]["text"])
+            self.assertNotIn("SENSITIVE_SYMLINK_TARGET", report_resource["contents"][0]["text"])
+
+    def test_system_maintainer_can_reconcile_dbms_state_via_mcp_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            reports_dir = vault / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "reports"
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            index_report = reports_dir / "2026-04-20-index-audit-report.md"
+            archive_report = reports_dir / "2026-04-20-archive-review.md"
+            index_report.write_text("# Index Audit Report\n", encoding="utf-8")
+            archive_report.write_text("# Archive Review\n", encoding="utf-8")
+
+            index_state_path = vault / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "last-index-run.json"
+            index_state = json.loads(index_state_path.read_text(encoding="utf-8"))
+            index_state.update(
+                {
+                    "version": "1.3",
+                    "last_index_run": "2026-04-20T05:00:00+00:00",
+                    "last_actor": "db-admin-agent",
+                    "last_task_type": "index_rebuild",
+                    "last_report_path": "01-Workflow/Knowledge-Governance/DBMS/reports/missing-index-report.md",
+                    "last_status": "complete-zero-findings",
+                    "total_files": 100,
+                    "total_findings": 0,
+                    "findings_by_type": {},
+                }
+            )
+            index_state_path.write_text(json.dumps(index_state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            result = backend.call_tool("governance_reconcile_dbms_state", {})
+
+            self.assertFalse(result["isError"])
+            self.assertEqual(result["structuredContent"]["exitCode"], 0)
+            self.assertIn("DBMS_STATE_RECONCILED", result["structuredContent"]["stdout"])
+            self.assertEqual(
+                result["structuredContent"]["indexState"]["last_report_path"],
+                "01-Workflow/Knowledge-Governance/DBMS/reports/2026-04-20-index-audit-report.md",
+            )
+            self.assertEqual(result["structuredContent"]["dbmsState"]["last_status"], "state-reconciled")
+            self.assertTrue(result["structuredContent"]["reportPath"].endswith("-state-reconciliation.md"))
+            self.assertTrue((vault / result["structuredContent"]["reportPath"]).exists())
+
+            ledger_lines = [line for line in (vault / ".knowledge-registry" / "change-ledger.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+            self.assertEqual(json.loads(ledger_lines[-1])["operation"], "state_reconcile")
 
     def test_propose_registry_update_persists_governance_proposal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -282,6 +615,16 @@ class McpGovernanceServerTests(unittest.TestCase):
             proposals = json.loads((vault / ".knowledge-registry" / "governance-proposals.json").read_text(encoding="utf-8"))
             self.assertEqual(len(proposals["items"]), 1)
             self.assertEqual(proposals["items"][0]["proposal_id"], proposal["proposal_id"])
+
+    def test_propose_registry_update_tool_schema_matches_response_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            backend = GovernanceBackend(vault, subject_id="owner@example.com", auth_mode="oauth")
+            tool = next(item for item in backend.list_tools() if item["name"] == "governance_propose_registry_update")
+
+            self.assertEqual(set(tool["outputSchema"]["properties"].keys()), {"proposal"})
 
     def test_request_snapshot_review_persists_governance_proposal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1363,6 +1706,33 @@ class McpGovernanceServerTests(unittest.TestCase):
             tool_names = [item["name"] for item in tools_response["result"]["tools"]]
             self.assertIn("governance_whoami", tool_names)
             self.assertNotIn("governance_apply_snapshot_upgrade", tool_names)
+
+    def test_stdio_server_lists_dbms_tools_and_resources_for_system_maintainer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            self._install_and_seed_vault(vault)
+
+            messages = _run_stdio_sequence(
+                vault,
+                "owner@example.com",
+                "oauth",
+                [
+                    {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+                    {"jsonrpc": "2.0", "id": 3, "method": "resources/list", "params": {}},
+                ],
+            )
+
+            tools_response = next(item for item in messages if item.get("id") == 2)
+            resources_response = next(item for item in messages if item.get("id") == 3)
+            tool_names = [item["name"] for item in tools_response["result"]["tools"]]
+            resource_uris = [item["uri"] for item in resources_response["result"]["resources"]]
+
+            self.assertIn("governance_rebuild_dbms_index", tool_names)
+            self.assertIn("governance_reconcile_dbms_state", tool_names)
+            self.assertIn("governance://dbms/index/file-index", resource_uris)
+            self.assertIn("governance://dbms/index/topic-summary", resource_uris)
+            self.assertIn("governance://dbms/state/last-index-run", resource_uris)
+            self.assertIn("governance://dbms/reports/latest-index-audit", resource_uris)
 
     def test_stdio_end_to_end_promotion_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

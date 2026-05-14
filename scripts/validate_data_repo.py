@@ -100,6 +100,7 @@ def main() -> None:
         root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index" / "topic-summary.json",
         root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index" / "findings.json",
         root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "last-index-run.json",
+        root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "last-dbms-run.json",
     ]
 
     missing = [str(p) for p in required if not p.exists()]
@@ -117,6 +118,7 @@ def main() -> None:
         root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index" / "topic-summary.json",
         root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index" / "findings.json",
         root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "last-index-run.json",
+        root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "last-dbms-run.json",
     ]:
         parse_json(p)
 

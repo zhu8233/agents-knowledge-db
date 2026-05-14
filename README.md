@@ -186,6 +186,7 @@ python scripts/run_mcp_server.py /path/to/your-vault --subject-id owner@example.
 - `schemas/dbms-topic-summary.schema.json`
 - `schemas/dbms-findings.schema.json`
 - `schemas/dbms-index-run-state.schema.json`
+- `schemas/dbms-run-state.schema.json`
 - `schemas/mcp-access-policy.schema.json`
 
 ### Vault bootstrap templates
@@ -284,6 +285,7 @@ The current implementation supports:
 - identity introspection through `governance_whoami`
 - role-filtered tool visibility driven by `LocalOverrides/mcp-access-policy.json`
 - controlled registry writes through `governance_apply_registry_update` for authorized system maintainers
+- controlled DBMS maintenance through `governance_rebuild_dbms_index` and `governance_reconcile_dbms_state` for authorized system maintainers
 - promotion queue creation through `governance_create_promotion_proposal` for authorized maintainers
 - promotion queue review/apply through `governance_list_promotion_queue`, `governance_review_promotion_proposal`, and `governance_apply_promotion_proposal`
 - snapshot review requests through `governance_request_snapshot_review`
@@ -300,6 +302,10 @@ The current MCP resources include:
 - snapshot version
 - change ledger
 - DBMS findings
+- DBMS file index
+- DBMS topic summary
+- DBMS last index run state
+- latest DBMS index audit report
 
 The current MCP prompts include:
 

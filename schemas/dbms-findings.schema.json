@@ -22,6 +22,7 @@
               "layer_path_mismatch",
               "topic_unresolved",
               "frontmatter_missing",
+              "frontmatter_invalid",
               "protected_zone_unexpected_file",
               "canonical_orphan_index"
             ]

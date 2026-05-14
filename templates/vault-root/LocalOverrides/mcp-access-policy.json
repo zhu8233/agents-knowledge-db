@@ -50,23 +50,28 @@
         "governance_list_topic_findings",
         "governance_whoami",
         "governance_validate_data_repo",
-        "generate_governance_report",
+        "vault_list_paths",
+        "vault_read_markdown",
+        "vault_search_markdown",
+        "vault_check_artifacts",
+        "vault_scan_curation_gaps",
         "governance_propose_registry_update",
         "governance_evaluate_access",
         "governance_create_promotion_proposal",
         "governance_list_promotion_queue",
-        "governance_review_snapshot_upgrade",
-        "request_index_rebuild",
         "governance_request_snapshot_review",
-        "submit_audit_remediation_proposal"
+        "governance_review_snapshot_upgrade"
       ],
       "proposal_only_tools": [
         "governance_apply_registry_update",
-        "governance_apply_snapshot_upgrade",
-        "repair_protected_zone"
+        "governance_apply_snapshot_upgrade"
       ],
+      "proposal_tool_overrides": {
+        "governance_apply_registry_update": "governance_propose_registry_update",
+        "governance_apply_snapshot_upgrade": "governance_request_snapshot_review"
+      },
       "max_risk_level": "L1",
-      "require_approval_at_or_above": "L1",
+      "require_approval_at_or_above": "L2",
       "suggested_proposal_tool": "governance_propose_registry_update"
     },
     {
@@ -76,11 +81,10 @@
         "governance_get_topic_context",
         "governance_list_topic_findings",
         "governance_whoami",
-        "get_source_lineage",
-        "get_change_summary",
-        "ask_governance_rules",
-        "list_canonical_assets",
-        "explain_topic_status"
+        "vault_list_paths",
+        "vault_read_markdown",
+        "vault_search_markdown",
+        "vault_check_artifacts"
       ],
       "proposal_only_tools": [],
       "max_risk_level": "L0",

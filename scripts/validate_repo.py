@@ -26,6 +26,7 @@ REQUIRED_FILES = [
     "schemas/dbms-topic-summary.schema.json",
     "schemas/dbms-findings.schema.json",
     "schemas/dbms-index-run-state.schema.json",
+    "schemas/dbms-run-state.schema.json",
     "schemas/mcp-access-policy.schema.json",
     "docs/agent-indexing.md",
     "docs/mcp-access-model.md",
@@ -55,12 +56,14 @@ REQUIRED_FILES = [
     "templates/vault-root/01-Workflow/Knowledge-Governance/DBMS/index/topic-summary.json",
     "templates/vault-root/01-Workflow/Knowledge-Governance/DBMS/index/findings.json",
     "templates/vault-root/01-Workflow/Knowledge-Governance/DBMS/state/last-index-run.json",
+    "templates/vault-root/01-Workflow/Knowledge-Governance/DBMS/state/last-dbms-run.json",
     "examples/portable-vault/RULES.md",
     "examples/portable-vault/01-Workflow/Knowledge-Governance/00-Agent-Onboarding.md",
     "examples/portable-vault/01-Workflow/Knowledge-Governance/DBMS/index/file-index.jsonl",
     "examples/portable-vault/01-Workflow/Knowledge-Governance/DBMS/index/topic-summary.json",
     "examples/portable-vault/01-Workflow/Knowledge-Governance/DBMS/index/findings.json",
     "examples/portable-vault/01-Workflow/Knowledge-Governance/DBMS/state/last-index-run.json",
+    "examples/portable-vault/01-Workflow/Knowledge-Governance/DBMS/state/last-dbms-run.json",
     "tests/regression-prompts/01-first-entry.md",
     "tests/regression-prompts/02-raw-source-update.md",
     "tests/regression-prompts/03-canonical-temptation.md",
@@ -169,6 +172,7 @@ def main() -> None:
         ROOT / "templates" / "vault-root" / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index" / "topic-summary.json",
         ROOT / "templates" / "vault-root" / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index" / "findings.json",
         ROOT / "templates" / "vault-root" / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "last-index-run.json",
+        ROOT / "templates" / "vault-root" / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "last-dbms-run.json",
         ROOT / "examples" / "portable-vault" / ".knowledge-registry" / "vault-registry.json",
         ROOT / "examples" / "portable-vault" / ".knowledge-registry" / "agent-roster.json",
         ROOT / "examples" / "portable-vault" / ".knowledge-registry" / "governance-proposals.json",
@@ -177,6 +181,7 @@ def main() -> None:
         ROOT / "examples" / "portable-vault" / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index" / "topic-summary.json",
         ROOT / "examples" / "portable-vault" / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index" / "findings.json",
         ROOT / "examples" / "portable-vault" / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "last-index-run.json",
+        ROOT / "examples" / "portable-vault" / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "last-dbms-run.json",
     ]:
         parse_json(registry)
 

@@ -108,6 +108,8 @@ def evaluate_access(vault_root: Path, subject_id: str, auth_mode: str, tool: str
         }
 
     if tool in role_policy.get("proposal_only_tools", []):
+        proposal_tool_overrides = role_policy.get("proposal_tool_overrides", {})
+        suggested_tool = proposal_tool_overrides.get(tool, role_policy.get("suggested_proposal_tool"))
         return {
             "subject_id": subject_id,
             "auth_mode": auth_mode,
@@ -118,7 +120,7 @@ def evaluate_access(vault_root: Path, subject_id: str, auth_mode: str, tool: str
             "risk_level": risk_level,
             "target_layer": target_layer,
             "requested_tool": tool,
-            "suggested_tool": role_policy.get("suggested_proposal_tool"),
+            "suggested_tool": suggested_tool,
             "requires_approval": False,
             "approval_reason": None,
             "requires_registry_write": agent.get("requires_registry_write"),

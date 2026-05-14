@@ -74,11 +74,17 @@ def normalized(path: Path, root: Path) -> str:
 
 def should_ignore(path: Path, root: Path) -> bool:
     rel = normalized(path, root)
+    if path.is_symlink():
+        return True
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return True
     if any(part in IGNORE_DIRS for part in path.parts):
         return True
     if path.suffix.lower() in IGNORE_SUFFIXES:
         return True
-    if rel.startswith("01-Workflow/Knowledge-Governance/DBMS/index/"):
+    if rel.startswith(RUNTIME_PREFIXES):
         return True
     return False
 
@@ -95,7 +101,7 @@ def classify_zone(rel_path: str, topic_layer_overrides: list[tuple[str, str]]) -
     for candidate, layer in topic_layer_overrides:
         if prefix_match(rel_path, candidate):
             return layer, layer, "data"
-    if rel_path.startswith(("ProjectRaw/", "00-GoolgleDrive_SyncData/")):
+    if rel_path.startswith(("ProjectRaw/", "00-GoogleDrive_SyncData/")):
         return "intake", "intake", "data"
     if rel_path.startswith(("40-Projects/", "Excalidraw/")):
         return "curation", "curation", "data"
@@ -208,6 +214,7 @@ def rebuild_index(root: Path) -> None:
     entries: list[dict] = []
     findings: list[dict] = []
     seen_paths: set[str] = set()
+    topic_counter: dict[str, Counter] = defaultdict(Counter)
 
     for path in sorted(root.rglob("*")):
         if not path.is_file() or should_ignore(path, root):
@@ -264,7 +271,7 @@ def rebuild_index(root: Path) -> None:
             findings.append(finding("frontmatter_missing", rel_path, "Markdown object is missing YAML frontmatter."))
         elif frontmatter_status == "invalid":
             scan_flags.append("frontmatter_invalid")
-            findings.append(finding("frontmatter_missing", rel_path, "Markdown object has invalid YAML frontmatter fence."))
+            findings.append(finding("frontmatter_invalid", rel_path, "Markdown object has invalid YAML frontmatter fence."))
 
         if registry_status == "unregistered":
             findings.append(finding("unregistered_file", rel_path, "Scanned file is not represented in vault-registry.objects."))
@@ -320,6 +327,7 @@ def rebuild_index(root: Path) -> None:
             )
             continue
         obj = objects_for_path[0]
+        topic_counter[obj.get("topic_id") or "__unassigned__"]["registry_missing_file"] += 1
         findings.append(
             finding(
                 "registry_missing_file",
@@ -350,7 +358,6 @@ def rebuild_index(root: Path) -> None:
         for entry in entries:
             fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-    topic_counter: dict[str, Counter] = defaultdict(Counter)
     for entry in entries:
         topic_key = entry["topic_id"] or "__unassigned__"
         topic_counter[topic_key]["files"] += 1
@@ -385,6 +392,7 @@ def rebuild_index(root: Path) -> None:
     dump_json(index_dir / "findings.json", findings_payload)
 
     report = report_path(root, now)
+    report.parent.mkdir(parents=True, exist_ok=True)
     finding_counts = Counter(item["finding_type"] for item in findings)
     top_lines = "\n".join(f"- `{key}`: {value}" for key, value in sorted(finding_counts.items())) or "- none"
     sample_findings = "\n".join(

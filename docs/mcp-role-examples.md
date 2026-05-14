@@ -39,21 +39,26 @@ Expected boundary:
 
 - can create proposals
 - can inspect queue state
-- cannot directly apply registry, snapshot, or promotion outcomes
+- can run validation
+- cannot directly apply registry, DBMS maintenance, snapshot, or promotion outcomes
 
 ## System Maintainer
 
 Typical sequence:
 
 1. `tools/call` -> `governance_evaluate_access`
-2. `tools/call` -> `governance_apply_registry_update`
-3. `tools/call` -> `governance_review_snapshot_upgrade`
-4. `tools/call` -> `governance_apply_snapshot_upgrade`
-5. `tools/call` -> `governance_review_promotion_proposal`
-6. `tools/call` -> `governance_apply_promotion_proposal`
+2. `tools/call` -> `governance_validate_data_repo`
+3. `tools/call` -> `governance_rebuild_dbms_index`
+4. `tools/call` -> `governance_reconcile_dbms_state`
+5. `tools/call` -> `governance_apply_registry_update`
+6. `tools/call` -> `governance_review_snapshot_upgrade`
+7. `tools/call` -> `governance_apply_snapshot_upgrade`
+8. `tools/call` -> `governance_review_promotion_proposal`
+9. `tools/call` -> `governance_apply_promotion_proposal`
 
 Expected boundary:
 
 - full governance visibility
+- DBMS maintenance runs through MCP instead of direct vault file access
 - high-risk actions still require approved proposals or explicit approval evidence
 - applied actions update queue/registry state and append ledger entries

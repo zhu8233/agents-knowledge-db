@@ -16,6 +16,7 @@ from snapshot_upgrade import (
     request_snapshot_review,
     review_snapshot_upgrade,
 )
+from vault_content_ops import append_markdown, check_artifacts, list_paths, read_markdown, scan_curation_gaps, search_markdown, upsert_markdown
 
 
 DEFAULT_PAGE_LIMIT = 20
@@ -59,13 +60,98 @@ class GovernanceBackend:
         self.auth_mode = auth_mode
 
     def _registry(self) -> dict:
-        return load_json(self.vault_root / ".knowledge-registry" / "vault-registry.json")
+        return self._safe_load_json(self.vault_root / ".knowledge-registry" / "vault-registry.json")
 
     def _agent_roster(self) -> dict:
-        return load_json(self.vault_root / ".knowledge-registry" / "agent-roster.json")
+        return self._safe_load_json(self.vault_root / ".knowledge-registry" / "agent-roster.json")
 
     def _findings(self) -> dict:
-        return load_json(self.vault_root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index" / "findings.json")
+        return self._safe_load_json(self.vault_root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index" / "findings.json")
+
+    def _dbms_index_dir(self) -> Path:
+        return self.vault_root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "index"
+
+    def _dbms_state_dir(self) -> Path:
+        return self.vault_root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state"
+
+    def _dbms_reports_dir(self) -> Path:
+        return self.vault_root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "reports"
+
+    def _script_path(self, script_name: str) -> Path:
+        return Path(__file__).resolve().parent / script_name
+
+    def _safe_resolve_file(self, path: Path) -> Path:
+        source_path = Path(path)
+        if not source_path.is_absolute():
+            source_path = self.vault_root / source_path
+        if source_path.exists() and source_path.is_symlink():
+            raise ValueError("resource path must not be a symlink")
+        resolved_path = source_path.resolve()
+        try:
+            resolved_path.relative_to(self.vault_root)
+        except ValueError as exc:
+            raise ValueError("resource path escapes the vault root") from exc
+        if not source_path.exists() or not resolved_path.exists() or not resolved_path.is_file():
+            raise ValueError("resource path must point to an existing file")
+        return resolved_path
+
+    def _safe_load_json(self, path: Path) -> dict:
+        return load_json(self._safe_resolve_file(path))
+
+    def _safe_read_text(self, path: Path) -> str:
+        return self._safe_resolve_file(path).read_text(encoding="utf-8")
+
+    def _load_json_if_exists(self, path: Path) -> dict | None:
+        source_path = Path(path)
+        if not source_path.is_absolute():
+            source_path = self.vault_root / source_path
+        return self._safe_load_json(source_path) if source_path.exists() else None
+
+    def _latest_index_report_path(self) -> Path | None:
+        index_state = self._load_json_if_exists(self._dbms_state_dir() / "last-index-run.json")
+        reports_root = self._dbms_reports_dir().resolve()
+        def is_safe_index_report(source_path: Path, resolved_path: Path) -> bool:
+            if not source_path.exists() or not source_path.is_file() or source_path.is_symlink():
+                return False
+            try:
+                resolved_path.relative_to(reports_root)
+            except ValueError:
+                return False
+            return resolved_path.name.endswith("index-audit-report.md")
+
+        if index_state is not None:
+            last_report_path = index_state.get("last_report_path")
+            if isinstance(last_report_path, str) and last_report_path:
+                source_path = self.vault_root / last_report_path
+                candidate = source_path.resolve()
+                if candidate.exists() and is_safe_index_report(source_path, candidate):
+                    return candidate
+
+        report_candidates = [
+            path for path in self._dbms_reports_dir().glob("*index-audit-report.md")
+            if path.exists() and is_safe_index_report(path, path.resolve())
+        ]
+        if not report_candidates:
+            return None
+        return max(report_candidates, key=lambda path: path.stat().st_mtime)
+
+    def _effective_role(self) -> str | None:
+        decision = self._evaluate("governance_whoami", "L0", "system")
+        if decision.get("decision") != "allow":
+            return None
+        return decision.get("effective_role")
+
+    def _resource_by_uri(self, uri: str) -> dict | None:
+        for resource in self._resource_catalog():
+            if resource["uri"] == uri:
+                return resource
+        return None
+
+    def _allowed_resource(self, resource: dict) -> bool:
+        role = self._effective_role()
+        if role is None:
+            return False
+        return role in resource.get("allowed_roles", [])
 
     def _resource_catalog(self) -> list[dict]:
         return [
@@ -74,54 +160,91 @@ class GovernanceBackend:
                 "name": "Root Rules",
                 "description": "Human-readable root operating rules for the governed vault.",
                 "mimeType": "text/markdown",
+                "allowed_roles": ["vault-user", "vault-maintainer", "system-maintainer"],
             },
             {
                 "uri": "governance://registry/vault",
                 "name": "Vault Registry",
                 "description": "Machine-readable topic and object registry source of truth.",
                 "mimeType": "application/json",
+                "allowed_roles": ["vault-user", "vault-maintainer", "system-maintainer"],
             },
             {
                 "uri": "governance://registry/agent-roster",
                 "name": "Agent Roster",
                 "description": "Machine-readable agent role and layer authority registry.",
                 "mimeType": "application/json",
+                "allowed_roles": ["vault-maintainer", "system-maintainer"],
             },
             {
                 "uri": "governance://registry/governance-proposals",
                 "name": "Governance Proposals",
                 "description": "Unified proposal store for registry, promotion, and snapshot workflows.",
                 "mimeType": "application/json",
+                "allowed_roles": ["vault-maintainer", "system-maintainer"],
             },
             {
                 "uri": "governance://registry/promotion-queue",
                 "name": "Promotion Queue",
                 "description": "Promotion queue state for canonical promotion workflow.",
                 "mimeType": "application/json",
+                "allowed_roles": ["vault-maintainer", "system-maintainer"],
             },
             {
                 "uri": "governance://local/compatibility-status",
                 "name": "Compatibility Status",
                 "description": "Local snapshot compatibility state.",
                 "mimeType": "application/json",
+                "allowed_roles": ["vault-maintainer", "system-maintainer"],
             },
             {
                 "uri": "governance://snapshot/version",
                 "name": "Snapshot Version",
                 "description": "Current installed system snapshot version metadata.",
                 "mimeType": "application/json",
+                "allowed_roles": ["vault-maintainer", "system-maintainer"],
             },
             {
                 "uri": "governance://registry/change-ledger",
                 "name": "Change Ledger",
                 "description": "Append-only governance change ledger.",
                 "mimeType": "application/x-ndjson",
+                "allowed_roles": ["vault-maintainer", "system-maintainer"],
             },
             {
                 "uri": "governance://dbms/index/findings",
                 "name": "DBMS Findings",
                 "description": "Derived audit findings from the DBMS materialized index.",
                 "mimeType": "application/json",
+                "allowed_roles": ["vault-user", "vault-maintainer", "system-maintainer"],
+            },
+            {
+                "uri": "governance://dbms/index/file-index",
+                "name": "DBMS File Index",
+                "description": "Derived whole-vault file coverage index for governance audit and scan tasks.",
+                "mimeType": "application/x-ndjson",
+                "allowed_roles": ["vault-user", "vault-maintainer", "system-maintainer"],
+            },
+            {
+                "uri": "governance://dbms/index/topic-summary",
+                "name": "DBMS Topic Summary",
+                "description": "Derived topic-level summary of indexed files and registry coverage.",
+                "mimeType": "application/json",
+                "allowed_roles": ["vault-user", "vault-maintainer", "system-maintainer"],
+            },
+            {
+                "uri": "governance://dbms/state/last-index-run",
+                "name": "Last DBMS Index Run",
+                "description": "Most recent DBMS index rebuild state and latest audit report pointer.",
+                "mimeType": "application/json",
+                "allowed_roles": ["vault-user", "vault-maintainer", "system-maintainer"],
+            },
+            {
+                "uri": "governance://dbms/reports/latest-index-audit",
+                "name": "Latest DBMS Index Audit",
+                "description": "Latest DBMS index audit report markdown.",
+                "mimeType": "text/markdown",
+                "allowed_roles": ["vault-user", "vault-maintainer", "system-maintainer"],
             },
         ]
 
@@ -261,6 +384,300 @@ class GovernanceBackend:
                 },
             },
             {
+                "name": "vault_list_paths",
+                "title": "List Vault Paths",
+                "description": "List allowed vault-relative paths without exposing raw filesystem access.",
+                "risk_level": "L0",
+                "target_layer": "system",
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["root"],
+                    "properties": {
+                        "root": {"type": "string"},
+                        "glob": {"type": "string", "default": "*"},
+                        "recursive": {"type": "boolean", "default": False},
+                        "include_dirs": {"type": "boolean", "default": False},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100},
+                    },
+                    "additionalProperties": False,
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "root": {"type": "string"},
+                        "paths": {"type": "array", "items": {"type": "string"}},
+                        "count": {"type": "integer"},
+                        "truncated": {"type": "boolean"},
+                    },
+                },
+            },
+            {
+                "name": "vault_read_markdown",
+                "title": "Read Vault Markdown",
+                "description": "Read an allowed vault Markdown file with optional heading or date filtering.",
+                "risk_level": "L0",
+                "target_layer": "system",
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["path"],
+                    "properties": {
+                        "path": {"type": "string"},
+                        "heading": {"type": "string"},
+                        "date_filter": {"type": "string"},
+                        "max_chars": {"type": "integer", "minimum": 1},
+                    },
+                    "additionalProperties": False,
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "hash": {"type": "string"},
+                        "found": {"type": "boolean"},
+                        "content": {"type": "string"},
+                        "section": {"type": ["string", "null"]},
+                        "truncated": {"type": "boolean"},
+                    },
+                },
+            },
+            {
+                "name": "vault_search_markdown",
+                "title": "Search Vault Markdown",
+                "description": "Search allowed vault Markdown paths or globs and return matching snippets.",
+                "risk_level": "L0",
+                "target_layer": "system",
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "paths": {"type": "array", "items": {"type": "string"}},
+                        "glob": {"type": "string"},
+                        "query": {"type": "string"},
+                        "regex": {"type": "string"},
+                        "date_filter": {"type": "string"},
+                        "max_results": {"type": "integer", "minimum": 1, "maximum": 100},
+                        "max_chars_per_hit": {"type": "integer", "minimum": 1, "maximum": 500},
+                    },
+                    "additionalProperties": False,
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "count": {"type": "integer"},
+                        "matches": {"type": "array", "items": {"type": "object"}},
+                    },
+                },
+            },
+            {
+                "name": "vault_check_artifacts",
+                "title": "Check Vault Artifacts",
+                "description": "Validate expected governed vault artifacts by glob, date, and content checks.",
+                "risk_level": "L0",
+                "target_layer": "system",
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["artifacts"],
+                    "properties": {
+                        "artifacts": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["path_glob"],
+                                "properties": {
+                                    "path_glob": {"type": "string"},
+                                    "required_date": {"type": "string"},
+                                    "content_contains": {"type": "string"},
+                                    "must_exist": {"type": "boolean"},
+                                },
+                                "additionalProperties": False,
+                            },
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "results": {"type": "array", "items": {"type": "object"}},
+                        "missing": {"type": "integer"},
+                        "content_failures": {"type": "integer"},
+                    },
+                },
+            },
+            {
+                "name": "vault_scan_curation_gaps",
+                "title": "Scan Curation Gaps",
+                "description": "Return candidate topics whose intake coverage suggests missing curation artifacts.",
+                "risk_level": "L1",
+                "target_layer": "system",
+                "annotations": {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "min_intake_files": {"type": "integer", "minimum": 1, "default": 5},
+                    },
+                    "additionalProperties": False,
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "count": {"type": "integer"},
+                        "items": {"type": "array", "items": {"type": "object"}},
+                    },
+                },
+            },
+            {
+                "name": "vault_upsert_markdown",
+                "title": "Upsert Vault Markdown",
+                "description": "Create, replace, or upsert governed Markdown content in approved vault write roots.",
+                "risk_level": "L2",
+                "target_layer": "system",
+                "annotations": {
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": False,
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["path", "content", "mode"],
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                        "mode": {"type": "string", "enum": ["create", "replace", "upsert"]},
+                        "expected_hash": {"type": "string"},
+                    },
+                    "additionalProperties": False,
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "operation": {"type": "string"},
+                        "old_hash": {"type": ["string", "null"]},
+                        "new_hash": {"type": "string"},
+                        "actor": {"type": "string"},
+                        "bytes_written": {"type": "integer"},
+                    },
+                },
+            },
+            {
+                "name": "vault_append_markdown",
+                "title": "Append Vault Markdown",
+                "description": "Append governed Markdown content at EOF or within a heading or date section.",
+                "risk_level": "L2",
+                "target_layer": "system",
+                "annotations": {
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": False,
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["path", "content", "target"],
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                        "target": {"type": "string", "enum": ["eof", "heading", "date_section"]},
+                        "heading": {"type": "string"},
+                        "date": {"type": "string"},
+                        "create_if_missing": {"type": "boolean", "default": False},
+                        "expected_hash": {"type": "string"},
+                    },
+                    "additionalProperties": False,
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "operation": {"type": "string"},
+                        "old_hash": {"type": ["string", "null"]},
+                        "new_hash": {"type": "string"},
+                        "actor": {"type": "string"},
+                        "created_file": {"type": "boolean"},
+                        "created_section": {"type": "boolean"},
+                    },
+                },
+            },
+            {
+                "name": "governance_rebuild_dbms_index",
+                "title": "Rebuild DBMS Index",
+                "description": "Rebuild the derived DBMS materialized index, state, and latest audit report.",
+                "risk_level": "L2",
+                "target_layer": "system",
+                "annotations": {
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": False,
+                },
+                "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "exitCode": {"type": "integer"},
+                        "stdout": {"type": "string"},
+                        "stderr": {"type": "string"},
+                        "reportPath": {"type": ["string", "null"]},
+                        "state": {"type": ["object", "null"]},
+                    },
+                },
+            },
+            {
+                "name": "governance_reconcile_dbms_state",
+                "title": "Reconcile DBMS State",
+                "description": "Repair derived DBMS state and report pointers after index or report drift.",
+                "risk_level": "L2",
+                "target_layer": "system",
+                "annotations": {
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": False,
+                },
+                "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "exitCode": {"type": "integer"},
+                        "stdout": {"type": "string"},
+                        "stderr": {"type": "string"},
+                        "reportPath": {"type": ["string", "null"]},
+                        "indexState": {"type": ["object", "null"]},
+                        "dbmsState": {"type": ["object", "null"]},
+                    },
+                },
+            },
+            {
                 "name": "governance_whoami",
                 "title": "Who Am I",
                 "description": "Return the current subject identity, effective role, and visible governance tools.",
@@ -313,8 +730,6 @@ class GovernanceBackend:
                     "type": "object",
                     "properties": {
                         "proposal": {"type": "object"},
-                        "review": {"type": "object"},
-                        "applyContext": {"type": "object"},
                     },
                 },
             },
@@ -797,11 +1212,16 @@ class GovernanceBackend:
         return [tool for tool in self._tool_catalog() if self._allowed_tool(tool)]
 
     def list_resources(self) -> list[dict]:
-        return self._resource_catalog()
+        return [resource for resource in self._resource_catalog() if self._allowed_resource(resource)]
 
     def read_resource(self, uri: str) -> dict:
+        resource_meta = self._resource_by_uri(uri)
+        if resource_meta is None:
+            raise ValueError(f"Unknown resource URI: {uri}")
+        if not self._allowed_resource(resource_meta):
+            raise ValueError(f"Access denied for resource `{uri}`")
         if uri == "governance://rules/root":
-            text = (self.vault_root / "RULES.md").read_text(encoding="utf-8")
+            text = self._safe_read_text(self.vault_root / "RULES.md")
             return {"contents": [{"uri": uri, "mimeType": "text/markdown", "text": text}]}
         if uri == "governance://registry/vault":
             text = json.dumps(self._registry(), ensure_ascii=False, indent=2)
@@ -810,23 +1230,39 @@ class GovernanceBackend:
             text = json.dumps(self._agent_roster(), ensure_ascii=False, indent=2)
             return {"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]}
         if uri == "governance://registry/governance-proposals":
-            text = json.dumps(load_json(self.vault_root / ".knowledge-registry" / "governance-proposals.json"), ensure_ascii=False, indent=2)
+            text = json.dumps(self._safe_load_json(self.vault_root / ".knowledge-registry" / "governance-proposals.json"), ensure_ascii=False, indent=2)
             return {"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]}
         if uri == "governance://registry/promotion-queue":
-            text = json.dumps(load_json(self.vault_root / ".knowledge-registry" / "promotion-queue.json"), ensure_ascii=False, indent=2)
+            text = json.dumps(self._safe_load_json(self.vault_root / ".knowledge-registry" / "promotion-queue.json"), ensure_ascii=False, indent=2)
             return {"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]}
         if uri == "governance://local/compatibility-status":
-            text = json.dumps(load_json(self.vault_root / "LocalOverrides" / "compatibility-status.json"), ensure_ascii=False, indent=2)
+            text = json.dumps(self._safe_load_json(self.vault_root / "LocalOverrides" / "compatibility-status.json"), ensure_ascii=False, indent=2)
             return {"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]}
         if uri == "governance://snapshot/version":
-            text = json.dumps(load_json(self.vault_root / ".dbms-system" / "version.json"), ensure_ascii=False, indent=2)
+            text = json.dumps(self._safe_load_json(self.vault_root / ".dbms-system" / "version.json"), ensure_ascii=False, indent=2)
             return {"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]}
         if uri == "governance://registry/change-ledger":
-            text = (self.vault_root / ".knowledge-registry" / "change-ledger.jsonl").read_text(encoding="utf-8")
+            text = self._safe_read_text(self.vault_root / ".knowledge-registry" / "change-ledger.jsonl")
             return {"contents": [{"uri": uri, "mimeType": "application/x-ndjson", "text": text}]}
         if uri == "governance://dbms/index/findings":
             text = json.dumps(self._findings(), ensure_ascii=False, indent=2)
             return {"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]}
+        if uri == "governance://dbms/index/file-index":
+            text = self._safe_read_text(self._dbms_index_dir() / "file-index.jsonl")
+            return {"contents": [{"uri": uri, "mimeType": "application/x-ndjson", "text": text}]}
+        if uri == "governance://dbms/index/topic-summary":
+            text = json.dumps(self._safe_load_json(self._dbms_index_dir() / "topic-summary.json"), ensure_ascii=False, indent=2)
+            return {"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]}
+        if uri == "governance://dbms/state/last-index-run":
+            text = json.dumps(self._safe_load_json(self._dbms_state_dir() / "last-index-run.json"), ensure_ascii=False, indent=2)
+            return {"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]}
+        if uri == "governance://dbms/reports/latest-index-audit":
+            report_path = self._latest_index_report_path()
+            if report_path is None:
+                text = "# DBMS Index Audit Report\n\nNo DBMS index audit report is available yet.\n"
+            else:
+                text = report_path.read_text(encoding="utf-8")
+            return {"contents": [{"uri": uri, "mimeType": "text/markdown", "text": text}]}
         raise ValueError(f"Unknown resource URI: {uri}")
 
     def list_prompts(self) -> list[dict]:
@@ -1031,7 +1467,7 @@ class GovernanceBackend:
 
     def _tool_governance_validate_data_repo(self, arguments: dict) -> dict:
         result = subprocess.run(
-            [sys.executable, str(Path(__file__).resolve().parent / "validate_data_repo.py"), str(self.vault_root)],
+            [sys.executable, str(self._script_path("validate_data_repo.py")), str(self.vault_root)],
             capture_output=True,
             text=True,
             cwd=self.vault_root.parents[0],
@@ -1046,6 +1482,132 @@ class GovernanceBackend:
                 "stdout": result.stdout,
                 "stderr": result.stderr,
             },
+        }
+
+    def _tool_vault_list_paths(self, arguments: dict) -> dict:
+        result = list_paths(
+            self.vault_root,
+            root=arguments["root"],
+            recursive=arguments.get("recursive", False),
+            glob=arguments.get("glob", "*"),
+            include_dirs=arguments.get("include_dirs", False),
+            limit=arguments.get("limit", 100),
+        )
+        return {
+            "isError": False,
+            "content": [{"type": "text", "text": f"Listed {result['count']} path(s)."}],
+            "structuredContent": result,
+        }
+
+    def _tool_vault_read_markdown(self, arguments: dict) -> dict:
+        result = read_markdown(self.vault_root, **arguments)
+        return {
+            "isError": False,
+            "content": [{"type": "text", "text": f"Read `{result['path']}`."}],
+            "structuredContent": result,
+        }
+
+    def _tool_vault_search_markdown(self, arguments: dict) -> dict:
+        result = search_markdown(self.vault_root, **arguments)
+        return {
+            "isError": False,
+            "content": [{"type": "text", "text": f"Found {result['count']} matching snippet(s)."}],
+            "structuredContent": result,
+        }
+
+    def _tool_vault_check_artifacts(self, arguments: dict) -> dict:
+        result = check_artifacts(self.vault_root, **arguments)
+        return {
+            "isError": False,
+            "content": [{"type": "text", "text": f"Checked {len(result['results'])} artifact spec(s)."}],
+            "structuredContent": result,
+        }
+
+    def _tool_vault_scan_curation_gaps(self, arguments: dict) -> dict:
+        result = scan_curation_gaps(self.vault_root, **arguments)
+        return {
+            "isError": False,
+            "content": [{"type": "text", "text": f"Found {result['count']} curation-gap candidate(s)."}],
+            "structuredContent": result,
+        }
+
+    def _tool_vault_upsert_markdown(self, arguments: dict) -> dict:
+        result = upsert_markdown(
+            self.vault_root,
+            path=arguments["path"],
+            content=arguments["content"],
+            mode=arguments["mode"],
+            actor=self.subject_id,
+            expected_hash=arguments.get("expected_hash"),
+        )
+        return {
+            "isError": False,
+            "content": [{"type": "text", "text": f"Updated `{result['path']}` via {result['operation']}."}],
+            "structuredContent": result,
+        }
+
+    def _tool_vault_append_markdown(self, arguments: dict) -> dict:
+        result = append_markdown(
+            self.vault_root,
+            path=arguments["path"],
+            content=arguments["content"],
+            target=arguments["target"],
+            actor=self.subject_id,
+            heading=arguments.get("heading"),
+            date=arguments.get("date"),
+            create_if_missing=arguments.get("create_if_missing", False),
+            expected_hash=arguments.get("expected_hash"),
+        )
+        return {
+            "isError": False,
+            "content": [{"type": "text", "text": f"Appended content to `{result['path']}`."}],
+            "structuredContent": result,
+        }
+
+    def _tool_governance_rebuild_dbms_index(self, arguments: dict) -> dict:
+        result = subprocess.run(
+            [sys.executable, str(self._script_path("rebuild_dbms_index.py")), str(self.vault_root)],
+            capture_output=True,
+            text=True,
+            cwd=self.vault_root.parents[0],
+        )
+        state = self._load_json_if_exists(self._dbms_state_dir() / "last-index-run.json")
+        structured = {
+            "exitCode": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "reportPath": state.get("last_report_path") if state is not None else None,
+            "state": state,
+        }
+        message = result.stdout.strip() or result.stderr.strip() or "DBMS index rebuild completed."
+        return {
+            "isError": result.returncode != 0,
+            "content": [{"type": "text", "text": message}],
+            "structuredContent": structured,
+        }
+
+    def _tool_governance_reconcile_dbms_state(self, arguments: dict) -> dict:
+        result = subprocess.run(
+            [sys.executable, str(self._script_path("reconcile_dbms_state.py")), str(self.vault_root)],
+            capture_output=True,
+            text=True,
+            cwd=self.vault_root.parents[0],
+        )
+        index_state = self._load_json_if_exists(self._dbms_state_dir() / "last-index-run.json")
+        dbms_state = self._load_json_if_exists(self._dbms_state_dir() / "last-dbms-run.json")
+        structured = {
+            "exitCode": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "reportPath": dbms_state.get("last_report_path") if dbms_state is not None else None,
+            "indexState": index_state,
+            "dbmsState": dbms_state,
+        }
+        message = result.stdout.strip() or result.stderr.strip() or "DBMS state reconciliation completed."
+        return {
+            "isError": result.returncode != 0,
+            "content": [{"type": "text", "text": message}],
+            "structuredContent": structured,
         }
 
     def _tool_governance_whoami(self, arguments: dict) -> dict:
