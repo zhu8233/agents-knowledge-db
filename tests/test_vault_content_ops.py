@@ -370,6 +370,39 @@ class VaultContentOpsTests(unittest.TestCase):
             self.assertEqual(result["operation"], "upsert")
             self.assertIn("owner@example.com", log_path.read_text(encoding="utf-8"))
 
+    def test_operation_log_does_not_raise_when_vault_path_traverses_os_level_symlink(self) -> None:
+        # On macOS, /var is a symlink to /private/var. Paths returned by
+        # tempfile.TemporaryDirectory() go through this OS-level symlink, so
+        # vault_root.resolve() returns a /private/var/... path while the unresolved
+        # vault_root path is /var/folders/.... _write_operation_log must not raise
+        # "operation log path must not be a symlink" when traversing these parents.
+        # Regression guard for the boundary-check fix in vault_content_ops.py.
+        if sys.platform != "darwin":
+            self.skipTest("macOS /var -> /private/var OS-level symlink scenario only")
+        with tempfile.TemporaryDirectory() as tmp:
+            # Do NOT resolve tmp here — keep the /var/folders/... form to exercise
+            # the OS-level symlink path through the parent-traversal boundary check.
+            vault = self._make_vault(Path(tmp))
+
+            result = upsert_markdown(
+                vault,
+                path="ProjectRaw/DailyReports/2026-05-31.md",
+                content="# OS-level symlink test\n",
+                mode="upsert",
+                actor="owner@example.com",
+            )
+
+            log_path = (
+                vault
+                / "01-Workflow"
+                / "Knowledge-Governance"
+                / "DBMS"
+                / "state"
+                / "mcp-operation-log.jsonl"
+            )
+            self.assertTrue(log_path.exists(), "operation log must be created")
+            self.assertEqual(result["operation"], "upsert")
+
     def test_upsert_markdown_rejects_disallowed_governance_write_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             vault = self._make_vault(Path(tmp))
