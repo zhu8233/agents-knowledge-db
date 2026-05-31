@@ -55,6 +55,12 @@ SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25"]
 
 class GovernanceBackend:
     def __init__(self, vault_root: Path, *, subject_id: str, auth_mode: str) -> None:
+        # INVARIANT: vault_root must be stored in its resolved (canonical) form.
+        # Methods like _safe_resolve_file and _latest_index_report_path compare
+        # resolved file paths against self.vault_root using relative_to(). On macOS,
+        # /var is a symlink to /private/var, so an unresolved vault_root path like
+        # /var/folders/... would never match a resolved file path like
+        # /private/var/folders/..., silently breaking the escape boundary checks.
         self.vault_root = Path(vault_root).resolve()
         self.subject_id = subject_id
         self.auth_mode = auth_mode
