@@ -315,6 +315,20 @@ class VaultContentOpsTests(unittest.TestCase):
             self.assertEqual(result["root"], "projectraw/health")
             self.assertIn("ProjectRaw/Health/diet.md", result["paths"])
 
+    def test_list_paths_accepts_case_insensitive_allowed_root_on_macos(self) -> None:
+        if sys.platform != "darwin":
+            self.skipTest("macOS case-insensitive filesystem behavior only")
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = self._make_vault(Path(tmp))
+
+            result = list_paths(vault, root="projectraw/health", recursive=True)
+
+            # On macOS, pathlib.Path.resolve() does not normalize case — the returned
+            # paths preserve the case submitted by the caller. The key assertion is that
+            # the function accepted the lowercase root (no ValueError) and returned results.
+            self.assertEqual(result["root"], "projectraw/health")
+            self.assertIn("projectraw/health/diet.md", result["paths"])
+
     def test_list_paths_rejects_non_positive_limit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             vault = self._make_vault(Path(tmp))

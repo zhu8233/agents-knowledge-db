@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,7 +51,10 @@ def _resolved_relative_to_vault(vault_root: Path, resolved_path: Path) -> Path:
 def _relative_is_within_root(relative: Path, root: Path) -> bool:
     relative_parts = relative.parts
     root_parts = root.parts
-    if os.name == "nt":
+    # Apply case-folding on filesystems that are case-insensitive by default:
+    # Windows (NTFS) and macOS (APFS/HFS+). Linux (ext4, etc.) is case-sensitive,
+    # so strict matching is correct there.
+    if os.name == "nt" or sys.platform == "darwin":
         relative_parts = tuple(part.casefold() for part in relative_parts)
         root_parts = tuple(part.casefold() for part in root_parts)
     return relative_parts == root_parts or relative_parts[: len(root_parts)] == root_parts
@@ -79,11 +83,18 @@ def _write_operation_log(
     log_path = vault_root / "01-Workflow" / "Knowledge-Governance" / "DBMS" / "state" / "mcp-operation-log.jsonl"
     vault_resolved = vault_root.resolve()
     for candidate in (log_path, *log_path.parents):
-        if candidate == vault_resolved.parent:
+        # Resolve the candidate for boundary comparison so that OS-level symlinks
+        # (e.g. /var -> /private/var on macOS) don't prevent the loop from stopping
+        # at the vault root.
+        try:
+            candidate_resolved = candidate.resolve()
+        except OSError:
+            candidate_resolved = candidate
+        if candidate_resolved == vault_resolved.parent:
             break
         if candidate.exists() and candidate.is_symlink():
             raise ValueError("operation log path must not be a symlink")
-        if candidate == vault_resolved:
+        if candidate_resolved == vault_resolved:
             break
     resolved_log_path = log_path.resolve()
     try:
