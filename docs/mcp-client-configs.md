@@ -107,7 +107,7 @@ mcp_servers:
     command: python3
     args:
       - /mnt/f/01-NativeLearnStore/obsidian_native/obsidian-vault-governance-kit/scripts/run_mcp_server.py
-      - /mnt/f/01-NativeLearnStore/obsidian_native/native_AllNotes_Governed
+      - /path/to/your-vault
       - --subject-id
       - owner@example.com
       - --auth-mode

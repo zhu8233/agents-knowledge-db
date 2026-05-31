@@ -268,7 +268,7 @@ The log should live under governance-controlled state, but it must not store ful
 4. Keep the current regression suite:
    - `python -m pytest tests/test_mcp_governance_server.py tests/test_mcp_access_evaluator.py tests/test_dbms_index_rebuild.py tests/test_dbms_state_reconcile.py -q`
    - `python scripts/validate_repo.py`
-   - `python scripts/validate_data_repo.py F:/01-NativeLearnStore/obsidian_native/native_AllNotes_Governed`
+   - `python scripts/validate_data_repo.py /path/to/your-vault`
 
 ## Rollout Notes
 

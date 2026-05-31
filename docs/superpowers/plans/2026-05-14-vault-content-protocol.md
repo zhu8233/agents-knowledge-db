@@ -620,7 +620,7 @@ Expected: PASS
 
 - [ ] **Step 3: Run repository and data-repo validation**
 
-Run: `python scripts/validate_repo.py && python scripts/validate_data_repo.py F:/01-NativeLearnStore/obsidian_native/native_AllNotes_Governed`
+Run: `python scripts/validate_repo.py && python scripts/validate_data_repo.py /path/to/your-vault`
 Expected: `VALIDATION_OK` then `VALIDATE_DATA_REPO_OK`
 
 - [ ] **Step 4: Update Hermes rollout notes before runtime cron migration**

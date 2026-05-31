@@ -1665,6 +1665,26 @@ class McpGovernanceServerTests(unittest.TestCase):
             vault = Path(tmp) / "vault"
             self._install_and_seed_vault(vault)
 
+            # Build the full input payload upfront and pass via communicate() to
+            # avoid the Python 3.9 bug where calling communicate() after manually
+            # closing proc.stdin raises ValueError: flush of closed file.
+            stdin_payload = b"".join([
+                _framed_message_bytes(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {
+                            "protocolVersion": "2025-11-25",
+                            "capabilities": {},
+                            "clientInfo": {"name": "launcher-test", "version": "1.0.0"},
+                        },
+                    }
+                ),
+                _framed_message_bytes({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+                _framed_message_bytes({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}),
+            ])
+
             proc = subprocess.Popen(
                 [
                     sys.executable,
@@ -1681,25 +1701,7 @@ class McpGovernanceServerTests(unittest.TestCase):
                 stderr=subprocess.PIPE,
             )
 
-            assert proc.stdin is not None
-            _write_framed_message(
-                proc.stdin,
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "initialize",
-                    "params": {
-                        "protocolVersion": "2025-11-25",
-                        "capabilities": {},
-                        "clientInfo": {"name": "launcher-test", "version": "1.0.0"},
-                    },
-                },
-            )
-            _write_framed_message(proc.stdin, {"jsonrpc": "2.0", "method": "notifications/initialized"})
-            _write_framed_message(proc.stdin, {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
-            proc.stdin.close()
-
-            stdout, stderr = proc.communicate(timeout=10)
+            stdout, stderr = proc.communicate(input=stdin_payload, timeout=10)
             self.assertEqual(proc.returncode, 0, stderr.decode("utf-8"))
             messages = _read_framed_messages(stdout)
             tools_response = next(item for item in messages if item.get("id") == 2)
