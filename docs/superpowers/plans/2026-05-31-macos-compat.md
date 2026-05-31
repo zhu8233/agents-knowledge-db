@@ -1,6 +1,6 @@
 # macOS Compatibility Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Fix the APFS case-insensitive path mismatch bug on macOS, add two macOS-specific regression tests, and document the implicit `vault_root.resolve()` contract in `GovernanceBackend`.
 
@@ -28,7 +28,7 @@
 
 **Context:** APFS/HFS+ on macOS is case-insensitive by default. The OS treats `projectraw/health` and `ProjectRaw/Health` as the same directory. The current access-control check only applies case-folding on Windows (`os.name == "nt"`), so macOS callers supplying lower-case root paths get a `ValueError` even though the filesystem would accept the path.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add this method to `VaultContentOpsTests` in `tests/test_vault_content_ops.py`, immediately after `test_list_paths_accepts_case_insensitive_allowed_root_on_windows` (line 316):
 
@@ -45,7 +45,7 @@ def test_list_paths_accepts_case_insensitive_allowed_root_on_macos(self) -> None
         self.assertIn("ProjectRaw/Health/diet.md", result["paths"])
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 python3 -m pytest tests/test_vault_content_ops.py::VaultContentOpsTests::test_list_paths_accepts_case_insensitive_allowed_root_on_macos -v
@@ -53,7 +53,7 @@ python3 -m pytest tests/test_vault_content_ops.py::VaultContentOpsTests::test_li
 
 Expected: `FAILED` with `ValueError: path must be inside an allowed read root`
 
-- [ ] **Step 3: Add `import sys` to `vault_content_ops.py`**
+- [x] **Step 3: Add `import sys` to `vault_content_ops.py`**
 
 `scripts/vault_content_ops.py` currently imports `os` but not `sys`. Add `sys` to the standard-library imports at the top of the file:
 
@@ -74,7 +74,7 @@ import re
 import sys
 ```
 
-- [ ] **Step 4: Extend case-folding to macOS**
+- [x] **Step 4: Extend case-folding to macOS**
 
 In `scripts/vault_content_ops.py`, replace the `_relative_is_within_root` function body:
 
@@ -103,7 +103,7 @@ def _relative_is_within_root(relative: Path, root: Path) -> bool:
     return relative_parts == root_parts or relative_parts[: len(root_parts)] == root_parts
 ```
 
-- [ ] **Step 5: Run the new test to verify it passes**
+- [x] **Step 5: Run the new test to verify it passes**
 
 ```bash
 python3 -m pytest tests/test_vault_content_ops.py::VaultContentOpsTests::test_list_paths_accepts_case_insensitive_allowed_root_on_macos -v
@@ -111,7 +111,7 @@ python3 -m pytest tests/test_vault_content_ops.py::VaultContentOpsTests::test_li
 
 Expected: `PASSED`
 
-- [ ] **Step 6: Run the full test suite to check for regressions**
+- [x] **Step 6: Run the full test suite to check for regressions**
 
 ```bash
 python3 -m pytest tests/ -v
@@ -119,7 +119,7 @@ python3 -m pytest tests/ -v
 
 Expected: all previously passing tests still pass, new macOS test passes.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add scripts/vault_content_ops.py tests/test_vault_content_ops.py
@@ -137,7 +137,7 @@ git commit -m "fix: extend case-insensitive path matching to macOS (APFS/HFS+)"
 
 The test does NOT create an artificial symlink — it relies on the real macOS filesystem topology. It is skipped on Linux and Windows where the scenario does not apply.
 
-- [ ] **Step 1: Write the regression test**
+- [x] **Step 1: Write the regression test**
 
 Add this method to `VaultContentOpsTests` in `tests/test_vault_content_ops.py`, immediately after `test_upsert_markdown_records_operation_log` (line 357):
 
@@ -175,7 +175,7 @@ def test_operation_log_does_not_raise_when_vault_path_traverses_os_level_symlink
         self.assertEqual(result["operation"], "upsert")
 ```
 
-- [ ] **Step 2: Run test to verify it passes**
+- [x] **Step 2: Run test to verify it passes**
 
 ```bash
 python3 -m pytest tests/test_vault_content_ops.py::VaultContentOpsTests::test_operation_log_does_not_raise_when_vault_path_traverses_os_level_symlink -v
@@ -183,7 +183,7 @@ python3 -m pytest tests/test_vault_content_ops.py::VaultContentOpsTests::test_op
 
 Expected: `PASSED` (the fix from the earlier session already ensures this passes; the test documents it)
 
-- [ ] **Step 3: Run the full test suite to check for regressions**
+- [x] **Step 3: Run the full test suite to check for regressions**
 
 ```bash
 python3 -m pytest tests/ -v
@@ -191,7 +191,7 @@ python3 -m pytest tests/ -v
 
 Expected: all previously passing tests still pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/test_vault_content_ops.py
@@ -207,7 +207,7 @@ git commit -m "test: add macOS /var symlink regression test for operation log bo
 
 **Context:** `_safe_resolve_file` and `_latest_index_report_path` both call `resolved_path.relative_to(self.vault_root)`. This boundary check is only correct on macOS if `self.vault_root` is pre-resolved (so that the comparison is `/private/var/...` vs `/private/var/...`, not `/var/...` vs `/private/var/...`). The `__init__` already calls `.resolve()`, but there is no comment explaining that downstream methods depend on this invariant.
 
-- [ ] **Step 1: Add invariant comment to `__init__`**
+- [x] **Step 1: Add invariant comment to `__init__`**
 
 In `scripts/mcp_governance_backend.py`, replace:
 
@@ -233,7 +233,7 @@ With:
         self.auth_mode = auth_mode
 ```
 
-- [ ] **Step 2: Run the full test suite to check nothing broke**
+- [x] **Step 2: Run the full test suite to check nothing broke**
 
 ```bash
 python3 -m pytest tests/ -v
@@ -241,7 +241,7 @@ python3 -m pytest tests/ -v
 
 Expected: all previously passing tests still pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/mcp_governance_backend.py
@@ -252,7 +252,7 @@ git commit -m "docs: document vault_root.resolve() invariant in GovernanceBacken
 
 ## Final Verification
 
-- [ ] **Run validate_repo and validate_system_repo**
+- [x] **Run validate_repo and validate_system_repo**
 
 ```bash
 python3 scripts/validate_repo.py && python3 scripts/validate_system_repo.py
@@ -264,7 +264,7 @@ VALIDATION_OK
 VALIDATE_SYSTEM_REPO_OK
 ```
 
-- [ ] **Confirm test counts**
+- [x] **Confirm test counts**
 
 ```bash
 python3 -m pytest tests/ -v 2>&1 | tail -3

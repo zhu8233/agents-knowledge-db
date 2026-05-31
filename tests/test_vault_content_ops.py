@@ -324,8 +324,10 @@ class VaultContentOpsTests(unittest.TestCase):
             result = list_paths(vault, root="projectraw/health", recursive=True)
 
             # On macOS, pathlib.Path.resolve() does not normalize case — the returned
-            # paths preserve the case submitted by the caller. The key assertion is that
-            # the function accepted the lowercase root (no ValueError) and returned results.
+            # paths preserve the case submitted by the caller (e.g. "projectraw/health/..."
+            # rather than "ProjectRaw/Health/..."). This is self-consistent: subsequent
+            # calls that use the returned paths are accepted because _relative_is_within_root
+            # now case-folds on macOS (verified: read_markdown(vault, path=returned_path) works).
             self.assertEqual(result["root"], "projectraw/health")
             self.assertIn("projectraw/health/diet.md", result["paths"])
 

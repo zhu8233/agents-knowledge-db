@@ -89,6 +89,13 @@ def _write_operation_log(
         try:
             candidate_resolved = candidate.resolve()
         except OSError:
+            # Fallback: use the unresolved candidate. On macOS this means the
+            # boundary comparison (candidate_resolved == vault_resolved) will
+            # fail for paths that go through /var -> /private/var — the loop
+            # will over-iterate past the vault root and continue checking
+            # parent dirs for user-created symlinks. This is a degraded but
+            # safe path: the symlink check still rejects malicious redirects;
+            # it just does slightly more work than necessary.
             candidate_resolved = candidate
         if candidate_resolved == vault_resolved.parent:
             break
